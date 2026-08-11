@@ -56,12 +56,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getUserName = () => {
-    if (!user) return 'Administrador';
+    if (!user) return 'Visitante';
     return (
       user.user_metadata?.full_name ||
       user.user_metadata?.name ||
       user.email?.split('@')[0] ||
-      'Administrador'
+      'Usuário'
     );
   };
 
