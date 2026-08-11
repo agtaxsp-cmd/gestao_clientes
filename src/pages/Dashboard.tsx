@@ -40,15 +40,34 @@ export default function Dashboard() {
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
 
+  const [segmentStats, setSegmentStats] = useState<{ industria: number; comercio: number; servico: number }>({
+    industria: 0,
+    comercio: 0,
+    servico: 0
+  });
+
+  const [userActivityStats, setUserActivityStats] = useState<{ usuario: string; count: number }[]>([]);
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
 
-      // 1. Total Clientes
-      const { count: countClients, error: errC } = await supabase
+      // 1. Total Clientes e Segmentos
+      const { data: clientsData, error: errC } = await supabase
         .from('clients')
-        .select('*', { count: 'exact', head: true });
+        .select('segmento');
       if (errC) throw errC;
+
+      const totalClientsCount = clientsData?.length || 0;
+      const indCount = clientsData?.filter(c => c.segmento === 'industria').length || 0;
+      const comCount = clientsData?.filter(c => c.segmento === 'comercio').length || 0;
+      const serCount = clientsData?.filter(c => c.segmento === 'servico').length || 0;
+
+      setSegmentStats({
+        industria: indCount,
+        comercio: comCount,
+        servico: serCount
+      });
 
       // 2. Esteiras em andamento
       const { count: countPipelines, error: errP } = await supabase
@@ -67,22 +86,36 @@ export default function Dashboard() {
       const criticosCount = matrixData?.filter(m => m.status_geral === 'atraso').length || 0;
 
       setStats({
-        totalClients: countClients || 0,
+        totalClients: totalClientsCount,
         emAndamento: countPipelines || 0,
         pendentes: pendentesCount,
         criticos: criticosCount
       });
 
-      // 4. Logs de atividades
+      // 4. Logs de atividades & contagem por responsável
       const { data: logsData, error: errL } = await supabase
         .from('activity_logs')
         .select('*, clients(razao_social)')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(50);
 
       if (errL) throw errL;
-      setLogs(logsData || []);
-    } catch (err: any) {
+      setLogs(logsData?.slice(0, 10) || []);
+
+      // Calcular contagem de atividades por responsável
+      const userCountsMap: Record<string, number> = {};
+      logsData?.forEach(log => {
+        const u = log.usuario_nome || 'Sistema';
+        userCountsMap[u] = (userCountsMap[u] || 0) + 1;
+      });
+
+      const userStatsArr = Object.entries(userCountsMap)
+        .map(([usuario, count]) => ({ usuario, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 4);
+
+      setUserActivityStats(userStatsArr);
+    } catch (err: unknown) {
       console.error('Erro ao carregar dados do Dashboard:', err);
     } finally {
       setLoading(false);
@@ -166,39 +199,86 @@ export default function Dashboard() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Chart Card */}
-          <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Métricas Globais</h3>
-            <div className="flex-1 flex flex-col justify-center items-center py-6 gap-4">
-              <div className="w-32 h-32 rounded-full border-[12px] border-indigo-600 flex items-center justify-center relative">
-                <span className="text-2xl font-bold text-slate-900">{stats.totalClients}</span>
+          {/* Clientes por Segmento Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Clientes por Segmento</h3>
+            <div className="flex-1 flex flex-col justify-around gap-3">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-medium text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                    Indústria
+                  </span>
+                  <span className="font-semibold text-slate-900">{segmentStats.industria}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-blue-600 h-full transition-all duration-500" 
+                    style={{ width: `${stats.totalClients ? (segmentStats.industria / stats.totalClients) * 100 : 0}%` }}
+                  ></div>
+                </div>
               </div>
-              <span className="text-xs text-slate-500 font-medium">Clientes Cadastrados no Banco</span>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-medium text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                    Comércio
+                  </span>
+                  <span className="font-semibold text-slate-900">{segmentStats.comercio}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-emerald-600 h-full transition-all duration-500" 
+                    style={{ width: `${stats.totalClients ? (segmentStats.comercio / stats.totalClients) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-medium text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                    Serviços
+                  </span>
+                  <span className="font-semibold text-slate-900">{segmentStats.servico}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-purple-600 h-full transition-all duration-500" 
+                    style={{ width: `${stats.totalClients ? (segmentStats.servico / stats.totalClients) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Pending Tasks Bars */}
-          <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Resumo da Carteira</h3>
-            <div className="flex-1 flex flex-col justify-around gap-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium text-slate-700">
-                  <span>Clientes Ativos</span>
-                  <span>{stats.totalClients}</span>
-                </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-indigo-600 h-full w-[100%]"></div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium text-slate-700">
-                  <span>Em Esteira Ativa</span>
-                  <span>{stats.emAndamento}</span>
-                </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-400 h-full" style={{ width: `${stats.totalClients ? (stats.emAndamento / stats.totalClients) * 100 : 0}%` }}></div>
-                </div>
-              </div>
+          {/* Atividades por Responsável Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Atividades por Responsável</h3>
+            <div className="flex-1 flex flex-col justify-around gap-3">
+              {userActivityStats.length === 0 ? (
+                <div className="text-xs text-slate-400 italic text-center py-4">Sem registros no momento</div>
+              ) : (
+                userActivityStats.map((item, idx) => {
+                  const maxCount = userActivityStats[0]?.count || 1;
+                  const colors = ['bg-indigo-600', 'bg-sky-500', 'bg-amber-500', 'bg-slate-600'];
+                  return (
+                    <div key={item.usuario} className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-medium text-slate-700">
+                        <span className="truncate max-w-[140px]" title={item.usuario}>{item.usuario}</span>
+                        <span className="font-semibold text-slate-900">{item.count} açõ{item.count > 1 ? 'es' : 'ao'}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className={`${colors[idx % colors.length]} h-full transition-all duration-500`}
+                          style={{ width: `${(item.count / maxCount) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
