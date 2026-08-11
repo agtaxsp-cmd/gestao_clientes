@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
+import { useAuth } from '../contexts/AuthContext';
 import { WorkflowPipeline, Client, PipelineStatusEnum, FiscalDocumentMatrix, WorkflowAssignment, FaseEnum, WorkflowPhase } from '../types';
 import { cn } from '../lib/utils';
 
@@ -29,6 +30,7 @@ const MESES = [
 ];
 
 export default function FluxoTrabalho() {
+  const { getUserName } = useAuth();
   const [pipelines, setPipelines] = useState<WorkflowPipeline[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [completeChecklists, setCompleteChecklists] = useState<FiscalDocumentMatrix[]>([]);
@@ -176,7 +178,7 @@ export default function FluxoTrabalho() {
         descricao: `Nova esteira criada para ${clientObj?.razao_social || 'Cliente'} (Período: Mês ${mesReferencia}/${anoReferencia})`,
         tipo_log: 'success',
         client_id: selectedClientId,
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       setShowModal(false);
@@ -219,7 +221,7 @@ export default function FluxoTrabalho() {
         descricao: `Esteira de ${clientName} avançou para a etapa ${nextStep}: ${stepNames[nextStep - 1] || ''}`,
         tipo_log: 'info',
         client_id: pipe.client_id,
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       fetchData();
@@ -254,7 +256,7 @@ export default function FluxoTrabalho() {
         descricao: `Esteira de ${clientName} retornou para a etapa ${prevStep}: ${stepNames[prevStep - 1] || ''}`,
         tipo_log: 'sync',
         client_id: pipe.client_id,
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       fetchData();
@@ -325,7 +327,7 @@ export default function FluxoTrabalho() {
         descricao: `Caminho da rede e observações atualizados para a etapa ${detailModalStepNum} (${stepName}) de ${clientName}`,
         tipo_log: 'info',
         client_id: detailModalPipe.client_id,
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       setDetailModalPipe(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, Layers } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
+import { useAuth } from '../contexts/AuthContext';
 import { TeamMember, WorkflowAssignment, FaseEnum, WorkflowPhase } from '../types';
 
 const DEFAULT_FASES: { key: string; name: string; color: string; ordem: number }[] = [
@@ -13,6 +14,7 @@ const DEFAULT_FASES: { key: string; name: string; color: string; ordem: number }
 ];
 
 export default function Configuracoes() {
+  const { getUserName } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [phases, setPhases] = useState<WorkflowPhase[]>([]);
   const [assignments, setAssignments] = useState<Record<string, { principal?: string; backup?: string }>>({});
@@ -115,7 +117,7 @@ export default function Configuracoes() {
         titulo: 'Novo Membro da Equipe',
         descricao: `${nome} (${cargo}) foi adicionado à equipe`,
         tipo_log: 'success',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       setNome('');
@@ -143,7 +145,7 @@ export default function Configuracoes() {
         titulo: 'Membro Removido',
         descricao: `${memObj?.nome || 'Membro'} foi removido da equipe`,
         tipo_log: 'error',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       fetchData();
@@ -175,7 +177,7 @@ export default function Configuracoes() {
         titulo: 'Nova Fase Criada',
         descricao: `Nova etapa do fluxo "${novaFaseNome.trim()}" criada (Ordem: ${newOrdem})`,
         tipo_log: 'success',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       setNovaFaseNome('');
@@ -200,7 +202,7 @@ export default function Configuracoes() {
         titulo: 'Fase Renomeada',
         descricao: `A etapa "${phase.nome}" foi renomeada para "${tempPhaseName.trim()}"`,
         tipo_log: 'info',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       setEditingPhaseId(null);
@@ -224,7 +226,7 @@ export default function Configuracoes() {
         titulo: 'Fase Removida',
         descricao: `A etapa "${phase.nome}" foi removida das configurações`,
         tipo_log: 'error',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       fetchData();
@@ -263,7 +265,7 @@ export default function Configuracoes() {
         titulo: 'Responsáveis Atualizados',
         descricao: 'Matriz de responsáveis pelas etapas do fluxo de trabalho salva com sucesso',
         tipo_log: 'info',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       alert('Matriz de atribuições salva com sucesso!');

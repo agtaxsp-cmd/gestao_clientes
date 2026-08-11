@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, Save, Lightbulb, Filter, MoreVertical, Eye, Pencil, Hash, ChevronLeft, ChevronRight, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
+import { useAuth } from '../contexts/AuthContext';
 import { Client, SegmentoEnum } from '../types';
 
 const SEGMENTO_MAP: Record<SegmentoEnum, { label: string; bg: string; text: string; dot: string; bar: string }> = {
@@ -11,6 +12,7 @@ const SEGMENTO_MAP: Record<SegmentoEnum, { label: string; bg: string; text: stri
 };
 
 export default function Clientes() {
+  const { getUserName } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +79,7 @@ export default function Clientes() {
           descricao: `Os dados do cliente ${razaoSocial} (CNPJ: ${cnpj}) foram atualizados`,
           tipo_log: 'info',
           client_id: editingId,
-          usuario_nome: 'Administrador'
+          usuario_nome: getUserName()
         });
       } else {
         const { data: inserted, error: insertErr } = await supabase
@@ -120,7 +122,7 @@ export default function Clientes() {
           descricao: `Novo cliente ${razaoSocial} (CNPJ: ${cnpj}) cadastrado e esteira iniciada automaticamente`,
           tipo_log: 'success',
           client_id: inserted?.id,
-          usuario_nome: 'Administrador'
+          usuario_nome: getUserName()
         });
       }
 
@@ -158,7 +160,7 @@ export default function Clientes() {
         titulo: 'Cliente Removido',
         descricao: `O cliente ${clientObj?.razao_social || ''} foi excluído do sistema`,
         tipo_log: 'error',
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
 
       fetchClients();

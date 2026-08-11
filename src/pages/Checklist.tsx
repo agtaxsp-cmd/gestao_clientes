@@ -3,6 +3,7 @@ import { Calendar, Search, Building, CheckCircle2, Clock, AlertCircle, ArrowUpDo
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
+import { useAuth } from '../contexts/AuthContext';
 import { FiscalDocumentMatrix, StatusDocEnum, StatusGeralEnum } from '../types';
 import { cn } from '../lib/utils';
 
@@ -61,6 +62,7 @@ const STATUS_IMPORT_MAP: Record<string, StatusDocEnum> = {
 };
 
 export default function Checklist() {
+  const { getUserName } = useAuth();
   const [viewMode, setViewMode] = useState<'sintetico' | 'analitico'>('sintetico');
   const [matrixData, setMatrixData] = useState<FiscalDocumentMatrix[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -198,7 +200,7 @@ export default function Checklist() {
         descricao: `${clientObj?.razao_social || 'Cliente'} teve a obrigação ${docKey.toUpperCase()} alterada para ${newVal} (${mes}/${anoBase})`,
         tipo_log: 'sync',
         client_id,
-        usuario_nome: 'Administrador'
+        usuario_nome: getUserName()
       });
     } catch (err: any) {
       console.error('Erro ao atualizar status:', err);

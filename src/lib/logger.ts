@@ -6,7 +6,7 @@ export async function logActivity({
   descricao,
   tipo_log = 'info',
   client_id = null,
-  usuario_nome = 'Administrador'
+  usuario_nome
 }: {
   titulo: string;
   descricao: string;
@@ -15,12 +15,28 @@ export async function logActivity({
   usuario_nome?: string;
 }) {
   try {
+    let activeUser = usuario_nome;
+
+    // Se o nome não foi informado ou é o valor padrão estático, buscar o usuário logado no Supabase Auth
+    if (!activeUser || activeUser === 'Administrador') {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        activeUser =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'Usuário Autenticado';
+      } else {
+        activeUser = 'Administrador';
+      }
+    }
+
     const { error } = await supabase.from('activity_logs').insert({
       titulo,
       descricao,
       tipo_log,
       client_id,
-      usuario_nome,
+      usuario_nome: activeUser,
       lido: false,
       created_at: new Date().toISOString()
     });
