@@ -66,8 +66,8 @@ export default function Checklist() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [anoBase, setAnoBase] = useState(2023);
-  const [mesBase, setMesBase] = useState(1);
+  const [anoBase, setAnoBase] = useState(new Date().getFullYear());
+  const [mesBase, setMesBase] = useState(new Date().getMonth() + 1);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   // Modais
@@ -76,8 +76,8 @@ export default function Checklist() {
 
   // Form Individual
   const [formClientId, setFormClientId] = useState('');
-  const [formAno, setFormAno] = useState(2023);
-  const [formMes, setFormMes] = useState(1);
+  const [formAno, setFormAno] = useState(new Date().getFullYear());
+  const [formMes, setFormMes] = useState(new Date().getMonth() + 1);
   const [formEfdIcms, setFormEfdIcms] = useState<StatusDocEnum>('na');
   const [formEfdPis, setFormEfdPis] = useState<StatusDocEnum>('na');
   const [formSpedEcd, setFormSpedEcd] = useState<StatusDocEnum>('na');
@@ -447,10 +447,17 @@ export default function Checklist() {
     (c.nome_grupo && c.nome_grupo.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const currentYear = new Date().getFullYear();
-  const defaultYears = Array.from({ length: 18 }, (_, i) => 2018 + i);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  // Gera a lista de anos de 2018 até o ano atual em tempo real (ex: 2018 a 2026; virando 2027 aparecerá até 2027)
+  const dynamicYears = Array.from(
+    { length: Math.max(1, currentYear - 2018 + 1) },
+    (_, i) => 2018 + i
+  );
   const customYearsFromData = matrixData.map(m => m.ano_base).filter(Boolean);
-  const availableYears = Array.from(new Set([...defaultYears, anoBase, currentYear, ...customYearsFromData])).sort((a, b) => b - a);
+  const availableYears = Array.from(new Set([...dynamicYears, anoBase, currentYear, ...customYearsFromData])).sort((a, b) => b - a);
 
   const getClientYearStatusSummary = (clientId: string) => {
     const clientRecords = matrixData.filter(m => m.client_id === clientId);
