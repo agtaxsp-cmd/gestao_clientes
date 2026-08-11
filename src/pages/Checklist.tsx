@@ -131,6 +131,9 @@ export default function Checklist() {
   const calcStatusGeral = (docs: StatusDocEnum[]): StatusGeralEnum => {
     if (docs.includes('critical')) return 'atraso';
     if (docs.includes('pending')) return 'pendente';
+    // Se não houver nenhum arquivo marcado como entregue/conforme ('compliant'), o status geral é 'pendente'
+    const compliantCount = docs.filter(d => d === 'compliant').length;
+    if (compliantCount === 0) return 'pendente';
     return 'completo';
   };
 
@@ -444,8 +447,14 @@ export default function Checklist() {
     (c.nome_grupo && c.nome_grupo.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const currentYear = new Date().getFullYear();
+  const defaultYears = Array.from({ length: 18 }, (_, i) => 2018 + i);
+  const customYearsFromData = matrixData.map(m => m.ano_base).filter(Boolean);
+  const availableYears = Array.from(new Set([...defaultYears, anoBase, currentYear, ...customYearsFromData])).sort((a, b) => b - a);
+
   const getClientYearStatusSummary = (clientId: string) => {
     const clientRecords = matrixData.filter(m => m.client_id === clientId);
+    if (clientRecords.length === 0) return 'pendente';
     if (clientRecords.some(m => m.status_geral === 'atraso')) return 'atraso';
     if (clientRecords.some(m => m.status_geral === 'pendente')) return 'pendente';
     if (clientRecords.length > 0 && clientRecords.every(m => m.status_geral === 'completo')) return 'completo';
@@ -519,7 +528,7 @@ export default function Checklist() {
           {/* Separador visual */}
           <div className="w-px h-6 bg-slate-200 hidden md:block" />
 
-          {/* Seletor Ano */}
+          {/* Seletor Ano Dinâmico */}
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
             <Calendar className="w-4 h-4 text-indigo-600" />
             <span className="text-xs font-medium text-slate-500">Ano:</span>
@@ -528,10 +537,9 @@ export default function Checklist() {
               onChange={(e) => setAnoBase(Number(e.target.value))}
               className="text-sm font-semibold text-slate-900 bg-transparent outline-none cursor-pointer"
             >
-              <option value={2023}>2023</option>
-              <option value={2024}>2024</option>
-              <option value={2025}>2025</option>
-              <option value={2026}>2026</option>
+              {availableYears.map((ano) => (
+                <option key={ano} value={ano}>{ano}</option>
+              ))}
             </select>
           </div>
 
