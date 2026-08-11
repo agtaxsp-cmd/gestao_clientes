@@ -1,0 +1,773 @@
+import React, { useState, useEffect } from 'react';
+import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, FileText } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { logActivity } from '../lib/logger';
+import { WorkflowPipeline, Client, PipelineStatusEnum, FiscalDocumentMatrix, WorkflowAssignment, FaseEnum, WorkflowPhase } from '../types';
+import { cn } from '../lib/utils';
+
+const DEFAULT_STEPS = [
+  { key: 'coleta_arquivos', nome: 'Arquivos', ordem: 1 },
+  { key: 'calculadora_rtc', nome: 'Calculadora RTC', ordem: 2 },
+  { key: 'compliance_rtc', nome: 'Compliance RTC', ordem: 3 },
+  { key: 'apuracao_assistida', nome: 'Apuração Assistida', ordem: 4 },
+  { key: 'entrega_apresentacao', nome: 'Entrega e Apresentação', ordem: 5 },
+];
+
+const MESES = [
+  { id: 1, nome: 'Janeiro', sigla: 'Jan' },
+  { id: 2, nome: 'Fevereiro', sigla: 'Fev' },
+  { id: 3, nome: 'Março', sigla: 'Mar' },
+  { id: 4, nome: 'Abril', sigla: 'Abr' },
+  { id: 5, nome: 'Maio', sigla: 'Mai' },
+  { id: 6, nome: 'Junho', sigla: 'Jun' },
+  { id: 7, nome: 'Julho', sigla: 'Jul' },
+  { id: 8, nome: 'Agosto', sigla: 'Ago' },
+  { id: 9, nome: 'Setembro', sigla: 'Set' },
+  { id: 10, nome: 'Outubro', sigla: 'Out' },
+  { id: 11, nome: 'Novembro', sigla: 'Nov' },
+  { id: 12, nome: 'Dezembro', sigla: 'Dez' },
+];
+
+export default function FluxoTrabalho() {
+  const [pipelines, setPipelines] = useState<WorkflowPipeline[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [completeChecklists, setCompleteChecklists] = useState<FiscalDocumentMatrix[]>([]);
+  const [assignments, setAssignments] = useState<WorkflowAssignment[]>([]);
+  const [phases, setPhases] = useState<WorkflowPhase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+
+  // Modal Novo Pipeline
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [anoReferencia, setAnoReferencia] = useState<number>(2023);
+  const [mesReferencia, setMesReferencia] = useState<number>(1);
+  const [caminhoRedeEtapa1, setCaminhoRedeEtapa1] = useState('');
+  const [mensagemInfo, setMensagemInfo] = useState('Pronto para iniciar a coleta de dados de faturamento.');
+
+  // Modal Detalhes da Etapa
+  const [detailModalPipe, setDetailModalPipe] = useState<WorkflowPipeline | null>(null);
+  const [detailModalStepNum, setDetailModalStepNum] = useState<number | null>(null);
+  const [detailModalPath, setDetailModalPath] = useState<string>('');
+  const [detailModalNotes, setDetailModalNotes] = useState<string>('');
+  const [savingDetail, setSavingDetail] = useState(false);
+
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      // Buscar fases do fluxo
+      const { data: phasesData, error: phaseErr } = await supabase
+        .from('workflow_phases')
+        .select('*')
+        .order('ordem', { ascending: true });
+
+      if (phaseErr) console.error('Erro ao buscar fases:', phaseErr);
+      const activePhases = (phasesData && phasesData.length > 0)
+        ? phasesData
+        : DEFAULT_STEPS.map(s => ({ id: s.key, key: s.key, nome: s.nome, ordem: s.ordem }));
+      
+      setPhases(activePhases);
+
+      // Buscar clientes
+      const { data: clientsData, error: clientErr } = await supabase
+        .from('clients')
+        .select('*')
+        .order('razao_social');
+
+      if (clientErr) throw clientErr;
+      setClients(clientsData || []);
+
+      // Buscar checklists com status_geral 'completo'
+      const { data: matrixData, error: matrixErr } = await supabase
+        .from('fiscal_documents_matrix')
+        .select('*, clients(*)')
+        .eq('status_geral', 'completo');
+
+      if (matrixErr) console.error('Erro ao carregar checklists:', matrixErr);
+      setCompleteChecklists(matrixData || []);
+
+      // Buscar atribuições de responsáveis para cada fase
+      const { data: assignData, error: assErr } = await supabase
+        .from('workflow_assignments')
+        .select('*, responsavel_principal:team_members!responsavel_principal_id(*), responsavel_backup:team_members!responsavel_backup_id(*)');
+
+      if (assErr) console.error('Erro ao carregar responsáveis:', assErr);
+      setAssignments(assignData || []);
+
+      // Buscar pipelines do Supabase
+      const { data: pipeData, error: pipeErr } = await supabase
+        .from('workflow_pipelines')
+        .select('*, clients(*)')
+        .order('created_at', { ascending: false });
+
+      if (pipeErr) throw pipeErr;
+      setPipelines(pipeData || []);
+    } catch (err: any) {
+      console.error('Erro ao carregar pipelines:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const totalSteps = phases.length || 5;
+
+  // Filtrar clientes que possuem pelo menos 1 período com status_geral = 'completo'
+  const clientsWithCompleteChecklist = clients.filter(client =>
+    completeChecklists.some(c => c.client_id === client.id)
+  );
+
+  // Períodos completos disponíveis para o cliente selecionado
+  const availablePeriodsForClient = completeChecklists.filter(c => c.client_id === selectedClientId);
+
+  const handleClientChange = (clientId: string) => {
+    setSelectedClientId(clientId);
+    const periods = completeChecklists.filter(c => c.client_id === clientId);
+    if (periods.length > 0) {
+      setAnoReferencia(periods[0].ano_base);
+      setMesReferencia(periods[0].mes_base);
+    }
+  };
+
+  const handlePeriodChange = (value: string) => {
+    const [ano, mes] = value.split('-').map(Number);
+    if (ano && mes) {
+      setAnoReferencia(ano);
+      setMesReferencia(mes);
+    }
+  };
+
+  const handleCreatePipeline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClientId || !anoReferencia || !mesReferencia) {
+      alert('Selecione um cliente e um período com checklist completo.');
+      return;
+    }
+
+    try {
+      const initialPaths: Record<string, string> = {};
+      if (caminhoRedeEtapa1) {
+        initialPaths['1'] = caminhoRedeEtapa1;
+      }
+
+      const clientObj = clients.find(c => c.id === selectedClientId);
+
+      const { error: insErr } = await supabase
+        .from('workflow_pipelines')
+        .insert({
+          client_id: selectedClientId,
+          status: 'iniciado',
+          etapa_atual: 1,
+          mensagem_info: mensagemInfo,
+          caminho_rede: caminhoRedeEtapa1 || null,
+          caminhos_rede_etapas: initialPaths,
+          ano_referencia: anoReferencia,
+          mes_referencia: mesReferencia
+        });
+
+      if (insErr) throw insErr;
+
+      await logActivity({
+        titulo: 'Nova Esteira Iniciada',
+        descricao: `Nova esteira criada para ${clientObj?.razao_social || 'Cliente'} (Período: Mês ${mesReferencia}/${anoReferencia})`,
+        tipo_log: 'success',
+        client_id: selectedClientId,
+        usuario_nome: 'Administrador'
+      });
+
+      setShowModal(false);
+      setSelectedClientId('');
+      setCaminhoRedeEtapa1('');
+      fetchData();
+    } catch (err: any) {
+      alert('Erro ao criar esteira: ' + err.message);
+    }
+  };
+
+  const handleAdvanceStep = async (pipe: WorkflowPipeline) => {
+    try {
+      const stepNames = phases.map(p => p.nome);
+      let nextStep = pipe.etapa_atual + 1;
+      let nextStatus: PipelineStatusEnum = 'em_andamento';
+      let nextMessage = `Em andamento na etapa ${nextStep}: ${stepNames[nextStep - 1] || ''}`;
+
+      if (nextStep > totalSteps) {
+        nextStep = totalSteps;
+        nextStatus = 'concluido';
+        nextMessage = 'Esteira finalizada com sucesso.';
+      }
+
+      const { error: upErr } = await supabase
+        .from('workflow_pipelines')
+        .update({
+          etapa_atual: nextStep,
+          status: nextStatus,
+          mensagem_info: nextMessage,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', pipe.id);
+
+      if (upErr) throw upErr;
+
+      const clientName = pipe.clients?.razao_social || 'Cliente';
+      await logActivity({
+        titulo: 'Avanço de Etapa',
+        descricao: `Esteira de ${clientName} avançou para a etapa ${nextStep}: ${stepNames[nextStep - 1] || ''}`,
+        tipo_log: 'info',
+        client_id: pipe.client_id,
+        usuario_nome: 'Administrador'
+      });
+
+      fetchData();
+    } catch (err: any) {
+      alert('Erro ao avançar etapa: ' + err.message);
+    }
+  };
+
+  const handleRegressStep = async (pipe: WorkflowPipeline) => {
+    if (pipe.etapa_atual <= 1) return;
+    try {
+      const stepNames = phases.map(p => p.nome);
+      const prevStep = pipe.etapa_atual - 1;
+      const prevStatus: PipelineStatusEnum = prevStep === 1 ? 'iniciado' : 'em_andamento';
+      const prevMessage = `Retornado para a etapa ${prevStep}: ${stepNames[prevStep - 1] || ''}`;
+
+      const { error: upErr } = await supabase
+        .from('workflow_pipelines')
+        .update({
+          etapa_atual: prevStep,
+          status: prevStatus,
+          mensagem_info: prevMessage,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', pipe.id);
+
+      if (upErr) throw upErr;
+
+      const clientName = pipe.clients?.razao_social || 'Cliente';
+      await logActivity({
+        titulo: 'Retorno de Etapa',
+        descricao: `Esteira de ${clientName} retornou para a etapa ${prevStep}: ${stepNames[prevStep - 1] || ''}`,
+        tipo_log: 'sync',
+        client_id: pipe.client_id,
+        usuario_nome: 'Administrador'
+      });
+
+      fetchData();
+    } catch (err: any) {
+      alert('Erro ao retornar etapa: ' + err.message);
+    }
+  };
+
+  const getStepPath = (pipe: WorkflowPipeline, stepNum: number): string => {
+    if (pipe.caminhos_rede_etapas && pipe.caminhos_rede_etapas[String(stepNum)]) {
+      return pipe.caminhos_rede_etapas[String(stepNum)];
+    }
+    if (stepNum === 1 && pipe.caminho_rede) return pipe.caminho_rede;
+    return '';
+  };
+
+  const getStepNotes = (pipe: WorkflowPipeline, stepNum: number): string => {
+    if (pipe.observacoes_etapas && pipe.observacoes_etapas[String(stepNum)]) {
+      return pipe.observacoes_etapas[String(stepNum)];
+    }
+    return '';
+  };
+
+  const openDetailModal = (pipe: WorkflowPipeline, stepNum?: number) => {
+    const initialStep = stepNum || pipe.etapa_atual || 1;
+    setDetailModalPipe(pipe);
+    setDetailModalStepNum(initialStep);
+    setDetailModalPath(getStepPath(pipe, initialStep));
+    setDetailModalNotes(getStepNotes(pipe, initialStep));
+  };
+
+  const handleSwitchDetailStep = (stepNum: number) => {
+    if (!detailModalPipe) return;
+    setDetailModalStepNum(stepNum);
+    setDetailModalPath(getStepPath(detailModalPipe, stepNum));
+    setDetailModalNotes(getStepNotes(detailModalPipe, stepNum));
+  };
+
+  const handleSaveDetail = async () => {
+    if (!detailModalPipe || !detailModalStepNum) return;
+    try {
+      setSavingDetail(true);
+      const stepNumStr = String(detailModalStepNum);
+
+      const currentPaths = detailModalPipe.caminhos_rede_etapas || {};
+      const updatedPaths = { ...currentPaths, [stepNumStr]: detailModalPath };
+
+      const currentNotes = detailModalPipe.observacoes_etapas || {};
+      const updatedNotes = { ...currentNotes, [stepNumStr]: detailModalNotes };
+
+      const { error: upErr } = await supabase
+        .from('workflow_pipelines')
+        .update({
+          caminhos_rede_etapas: updatedPaths,
+          observacoes_etapas: updatedNotes,
+          caminho_rede: detailModalStepNum === 1 ? detailModalPath : (detailModalPipe.caminho_rede || detailModalPath),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', detailModalPipe.id);
+
+      if (upErr) throw upErr;
+
+      const stepName = phases[detailModalStepNum - 1]?.nome || `Etapa ${detailModalStepNum}`;
+      const clientName = detailModalPipe.clients?.razao_social || 'Cliente';
+
+      await logActivity({
+        titulo: 'Detalhes da Etapa Atualizados',
+        descricao: `Caminho da rede e observações atualizados para a etapa ${detailModalStepNum} (${stepName}) de ${clientName}`,
+        tipo_log: 'info',
+        client_id: detailModalPipe.client_id,
+        usuario_nome: 'Administrador'
+      });
+
+      setDetailModalPipe(null);
+      setDetailModalStepNum(null);
+      fetchData();
+    } catch (err: any) {
+      alert('Erro ao salvar detalhes da etapa: ' + err.message);
+    } finally {
+      setSavingDetail(false);
+    }
+  };
+
+  const handleCopyStepPath = (path: string, key: string) => {
+    navigator.clipboard.writeText(path);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'CL';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const getStepAssignment = (stepNum: number) => {
+    const phaseObj = phases[stepNum - 1];
+    if (!phaseObj) return undefined;
+    return assignments.find(a => a.fase_fluxo === phaseObj.key);
+  };
+
+  return (
+    <div className="flex flex-col w-full gap-8 relative p-2">
+      <div className="flex flex-row justify-between items-end pb-4 border-b border-slate-200/50">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-semibold text-slate-900">Fluxo de Trabalho</h1>
+          <p className="text-slate-600 text-base max-w-2xl">
+            Acompanhe o progresso de cada cliente através do pipeline de conformidade integrado ao Supabase.
+          </p>
+        </div>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => {
+              setShowModal(true);
+              if (clientsWithCompleteChecklist.length > 0 && !selectedClientId) {
+                handleClientChange(clientsWithCompleteChecklist[0].id);
+              }
+            }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-700 rounded-full hover:bg-indigo-800 hover:shadow-md transition-all text-white shadow-sm cursor-pointer"
+          >
+            <GitMerge className="w-4 h-4" />
+            <span className="text-sm font-medium">Nova Esteira</span>
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center p-12 text-slate-500 gap-2">
+          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+          Carregando fluxos de trabalho...
+        </div>
+      ) : pipelines.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 text-center text-slate-500 shadow-sm border border-slate-200">
+          Nenhuma esteira de trabalho cadastrada no momento. Clique em "Nova Esteira" acima para iniciar.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {pipelines.map((pipe) => {
+            const clientName = pipe.clients?.razao_social || 'Cliente não identificado';
+            const cnpj = pipe.clients?.cnpj || '-';
+            const initials = getInitials(clientName);
+            const isConcluido = pipe.status === 'concluido';
+            const isEmAndamento = pipe.status === 'em_andamento';
+            const mesObj = MESES.find(m => m.id === (pipe.mes_referencia || 1));
+            const periodLabel = `${mesObj?.nome || 'Mês ' + (pipe.mes_referencia || 1)} / ${pipe.ano_referencia}`;
+            const activeStepPath = getStepPath(pipe, pipe.etapa_atual);
+
+            return (
+              <div key={pipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative overflow-hidden group hover:shadow-md transition-shadow duration-300">
+                {isConcluido && <div className="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>}
+                
+                {/* Cabeçalho do Card (Compacto) */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center relative shadow-xs border border-slate-200 shrink-0">
+                      <span className="text-base font-semibold text-indigo-700">{initials}</span>
+                      {isEmAndamento && (
+                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-200 rounded-full flex items-center justify-center shadow-xs border border-white">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                        </div>
+                      )}
+                      {isConcluido && (
+                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full flex items-center justify-center shadow-xs border border-white">
+                          <Check className="w-2 h-2 text-white stroke-[3]" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">{clientName}</h3>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">
+                        CNPJ: {cnpj} | <span className="font-semibold text-indigo-600">Período: {periodLabel}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Único Botão Detalhe & Badge Status */}
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={() => openDetailModal(pipe, pipe.etapa_atual)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 border border-indigo-200 rounded-xl text-xs font-semibold text-indigo-700 transition-all cursor-pointer shadow-2xs group/det"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600 group-hover/det:scale-110 transition-transform" />
+                      <span>Detalhe</span>
+                    </button>
+
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 capitalize",
+                      isConcluido ? "bg-emerald-100 text-emerald-700" :
+                      isEmAndamento ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-700"
+                    )}>
+                      {pipe.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Linha do Tempo Compacta */}
+                <div className="relative w-full py-1.5 my-1">
+                  <div className="absolute top-[16px] left-4 right-4 h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full"></div>
+                  <div 
+                    className={cn(
+                      "absolute top-[16px] left-4 h-1 -translate-y-1/2 z-0 rounded-full transition-all duration-500",
+                      isConcluido ? "bg-emerald-500" : "bg-indigo-600"
+                    )}
+                    style={{
+                      width: isConcluido 
+                        ? 'calc(100% - 2rem)' 
+                        : `calc(${Math.round(((pipe.etapa_atual - 1) / Math.max(1, phases.length - 1)) * 100)}% * 0.9 + 5%)`
+                    }}
+                  ></div>
+                  
+                  <div 
+                    className="grid gap-2 relative z-10 w-full px-2"
+                    style={{ gridTemplateColumns: `repeat(${phases.length}, minmax(0, 1fr))` }}
+                  >
+                    {phases.map((phaseObj, index) => {
+                      const stepNum = index + 1;
+                      const stepName = phaseObj.nome;
+                      const isCompleted = stepNum < pipe.etapa_atual || isConcluido;
+                      const isCurrent = stepNum === pipe.etapa_atual && !isConcluido;
+                      const isLocked = stepNum > pipe.etapa_atual;
+                      const assign = getStepAssignment(stepNum);
+                      const principalName = assign?.responsavel_principal?.nome;
+                      const backupName = assign?.responsavel_backup?.nome;
+
+                      return (
+                        <div key={index} className={cn("flex flex-col items-center gap-1 transition-opacity", isLocked && "opacity-60")}>
+                          {/* Círculo do Ícone */}
+                          <div className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center shadow-xs relative transition-all shrink-0",
+                            isCompleted ? "bg-emerald-500 text-white" :
+                            isCurrent ? "bg-white border-2 border-indigo-600 shadow-md ring-3 ring-indigo-50" :
+                            "bg-slate-100 border border-slate-200"
+                          )}>
+                            {isCompleted && <Check className="w-4 h-4 text-white stroke-[3]" />}
+                            {isCurrent && isEmAndamento && <Hourglass className="w-4 h-4 text-indigo-600 animate-spin" />}
+                            {isCurrent && !isEmAndamento && <PlayCircle className="w-4 h-4 text-indigo-600" />}
+                            {isLocked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                          </div>
+
+                          {/* Nome da Etapa */}
+                          <span className={cn(
+                            "text-[11px] font-medium text-center leading-tight mt-0.5",
+                            isCurrent ? "text-indigo-700 font-bold" : "text-slate-700"
+                          )}>
+                            {stepName}
+                          </span>
+
+                          {/* Bloco Responsáveis da Etapa Compacto */}
+                          <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
+                            {principalName ? (
+                              <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
+                                <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                                {principalName.split(' ')[0]}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
+                            )}
+                            {backupName && (
+                              <span className="text-[9px] text-slate-400 truncate max-w-[100px]" title={`Backup: ${backupName}`}>
+                                (Bk: {backupName.split(' ')[0]})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rodapé do Card com Ações (Voltar e Avançar) - Compacto */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="text-xs text-slate-600">{pipe.mensagem_info || 'Sem informações.'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Botão Voltar Etapa */}
+                    {pipe.etapa_atual > 1 && (
+                      <button 
+                        onClick={() => handleRegressStep(pipe)}
+                        className="text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1 border border-slate-200 px-3 py-1 rounded-lg hover:bg-slate-100 cursor-pointer shadow-2xs"
+                      >
+                        <ArrowLeft className="w-3 h-3" /> Voltar Etapa
+                      </button>
+                    )}
+
+                    {/* Botão Avançar Etapa */}
+                    {!isConcluido && (
+                      <button 
+                        onClick={() => handleAdvanceStep(pipe)}
+                        className="text-xs font-semibold text-white bg-indigo-700 hover:bg-indigo-800 transition-colors flex items-center gap-1 px-3.5 py-1 rounded-lg cursor-pointer shadow-2xs"
+                      >
+                        Avançar Etapa <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal Nova Esteira */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
+            <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Nova Esteira de Trabalho</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Selecione o cliente e o período cujo checklist fiscal foi concluído com sucesso.
+            </p>
+
+            {clientsWithCompleteChecklist.length === 0 ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-800 text-xs leading-relaxed mb-4">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-amber-900">Nenhum checklist completo encontrado</p>
+                  <p className="mt-1">
+                    Para iniciar uma esteira de trabalho, acesse o módulo <strong>Checklist Fiscal</strong> e certifique-se de que todos os documentos de ao menos um período estejam marcados como entregues/conformes.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCreatePipeline} className="flex flex-col gap-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Cliente (Com Checklist Completo)</label>
+                  <select 
+                    value={selectedClientId} 
+                    onChange={(e) => handleClientChange(e.target.value)}
+                    required
+                    className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 outline-none"
+                  >
+                    <option value="" disabled>Escolha um cliente habilitado</option>
+                    {clientsWithCompleteChecklist.map(c => (
+                      <option key={c.id} value={c.id}>{c.razao_social} ({c.cnpj})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Período Completo (Mês / Ano)</label>
+                  <select 
+                    value={`${anoReferencia}-${mesReferencia}`}
+                    onChange={(e) => handlePeriodChange(e.target.value)}
+                    required
+                    disabled={!selectedClientId}
+                    className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    {availablePeriodsForClient.length === 0 ? (
+                      <option value="">Nenhum período completo para este cliente</option>
+                    ) : (
+                      availablePeriodsForClient.map(p => {
+                        const mObj = MESES.find(m => m.id === p.mes_base);
+                        return (
+                          <option key={`${p.ano_base}-${p.mes_base}`} value={`${p.ano_base}-${p.mes_base}`}>
+                            {mObj?.nome || `Mês ${p.mes_base}`} / {p.ano_base} (Status: Completo)
+                          </option>
+                        );
+                      })
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Pasta da Etapa 1 (Arquivos) - Opcional</label>
+                  <input 
+                    type="text"
+                    value={caminhoRedeEtapa1}
+                    onChange={(e) => setCaminhoRedeEtapa1(e.target.value)}
+                    placeholder="Ex: \\servidor\fiscal\2023\01_Arquivos"
+                    className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 outline-none font-mono placeholder:font-sans"
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={!selectedClientId || availablePeriodsForClient.length === 0}
+                  className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Criar Fluxo de Trabalho
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalhes da Esteira */}
+      {detailModalPipe && detailModalStepNum && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-xl shadow-xl border border-slate-200 relative flex flex-col gap-5">
+            <button 
+              onClick={() => {
+                setDetailModalPipe(null);
+                setDetailModalStepNum(null);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Detalhes da Esteira de Trabalho
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Cliente: <strong className="text-slate-700">{detailModalPipe.clients?.razao_social}</strong> | Período: <strong className="text-indigo-600">Mês {detailModalPipe.mes_referencia}/{detailModalPipe.ano_referencia}</strong>
+              </p>
+            </div>
+
+            {/* Abas para selecionar qualquer Etapa do Fluxo */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-slate-200 scrollbar-thin">
+              {phases.map((p, idx) => {
+                const stepNum = idx + 1;
+                const isSelected = detailModalStepNum === stepNum;
+                const isCurrentPipeStep = detailModalPipe.etapa_atual === stepNum;
+
+                return (
+                  <button
+                    key={p.id || p.key}
+                    type="button"
+                    onClick={() => handleSwitchDetailStep(stepNum)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border",
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    )}
+                  >
+                    <span>{stepNum}. {p.nome}</span>
+                    {isCurrentPipeStep && (
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", isSelected ? "bg-amber-300" : "bg-amber-500")} title="Etapa atual em andamento" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {/* Caminho da Rede */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5 mb-1">
+                  <Folder className="w-4 h-4 text-indigo-600" />
+                  Caminho da Rede (Pasta do Servidor da Etapa {detailModalStepNum})
+                </label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text"
+                    value={detailModalPath}
+                    onChange={(e) => setDetailModalPath(e.target.value)}
+                    placeholder="Ex: \\servidor\fiscal\cliente\etapa_1"
+                    className="flex-1 h-10 px-3 border border-slate-200 rounded-lg text-xs font-mono bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                  />
+                  {detailModalPath && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(detailModalPath);
+                        alert('Caminho copiado para a área de transferência!');
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-lg text-xs font-medium transition-colors border border-slate-200 shrink-0 cursor-pointer"
+                    >
+                      Copiar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Texto Livre / Observações */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5 mb-1">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  Informações Livres / Observações da Etapa {detailModalStepNum} ({phases[detailModalStepNum - 1]?.nome})
+                </label>
+                <textarea
+                  rows={4}
+                  value={detailModalNotes}
+                  onChange={(e) => setDetailModalNotes(e.target.value)}
+                  placeholder="Digite aqui qualquer informação, instruções, notas de acompanhamento ou links referentes a esta etapa..."
+                  className="w-full p-3 border border-slate-200 rounded-lg text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailModalPipe(null);
+                  setDetailModalStepNum(null);
+                }}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingDetail}
+                onClick={handleSaveDetail}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-700 text-white rounded-lg text-xs font-semibold hover:bg-indigo-800 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {savingDetail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar Detalhes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

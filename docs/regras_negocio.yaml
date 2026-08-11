@@ -1,0 +1,68 @@
+# Regras de Negócio - TaxManager Hub
+
+modulos:
+  clientes:
+    descricao: "Gestão do cadastro e carteira de clientes"
+    regras:
+      - id: "CLI-01"
+        nome: "Validação de CNPJ"
+        descricao: "O CNPJ deve ser único no sistema e deve ser validado quanto à formatação e dígito verificador."
+      - id: "CLI-02"
+        nome: "Integração Receita Federal"
+        descricao: "Ao preencher o CNPJ, o BFF deve consultar uma API pública (ex: ReceitaWS) para auto-completar Razão Social, CNAE e Segmento."
+      - id: "CLI-03"
+        nome: "Grupo Econômico Opcional"
+        descricao: "O campo 'Nome do Grupo' é opcional. Se não preenchido, o sistema deve tratar como '-' na UI."
+
+  configuracoes:
+    descricao: "Gestão da equipe e matriz de responsabilidades"
+    regras:
+      - id: "CFG-01"
+        nome: "Atribuição Padrão"
+        descricao: "Toda fase do fluxo de trabalho DEVE ter um Responsável Principal. O Responsável Backup é opcional, mas recomendado."
+      - id: "CFG-02"
+        nome: "Restrição de Exclusão"
+        descricao: "Um membro da equipe não pode ser excluído se estiver ativamente alocado como responsável principal em um pipeline (Fluxo de Trabalho) 'Em Andamento'."
+
+  checklist_matriz:
+    descricao: "Controle de conformidade das obrigações acessórias (Documentos Fiscais)"
+    regras:
+      - id: "CHK-01"
+        nome: "Unicidade Anual"
+        descricao: "Só pode existir 1 (uma) matriz de documentos fiscais por Cliente para um determinado Ano Base."
+      - id: "CHK-02"
+        nome: "Cálculo do Status Geral"
+        descricao: "O 'Status Geral' é derivado automaticamente dos documentos:"
+        criterios:
+          completo: "Todos os documentos aplicáveis possuem status 'compliant' (Entregue) ou 'na' (Não Aplicável)."
+          pendente: "Existe ao menos um documento com status 'pending' (Pendente)."
+          atraso: "Existe ao menos um documento com status 'critical' (Atrasado/Faltante)."
+      - id: "CHK-03"
+        nome: "Junção de Dados (JOIN)"
+        descricao: "Ao consultar a matriz, o BFF deve agregar Razão Social, CNPJ e Grupo vindos da tabela de clientes, não duplicando os dados."
+
+  fluxo_trabalho:
+    descricao: "Pipelines e esteira operacional por cliente"
+    regras:
+      - id: "FLX-01"
+        nome: "Sequenciamento de Etapas"
+        descricao: "O fluxo possui 5 etapas fixas (Arquivos, Calc. RTC, Compliance RTC, Apuração, Entrega). O cliente só pode avançar para a etapa N+1 se a etapa N for dada como concluída."
+      - id: "FLX-02"
+        nome: "Gatilho de Avanço e Checklist"
+        descricao: "O desbloqueio da etapa 'Compliance RTC' (etapa 3) exige que a Matriz de Documentos (Checklist) daquele cliente não tenha status 'critical' (Atraso)."
+      - id: "FLX-03"
+        nome: "Conclusão Automática"
+        descricao: "Ao validar a Etapa 5 (Entrega e Apresentação), o pipeline muda o status geral para 'Concluído' e libera a geração do relatório final."
+      - id: "FLX-04"
+        nome: "Atribuição Dinâmica"
+        descricao: "Sempre que uma etapa é iniciada, o sistema notifica o Responsável Principal daquela fase (conforme definido nas Configurações)."
+
+  dashboard:
+    descricao: "Visão consolidada de métricas e auditoria"
+    regras:
+      - id: "DSH-01"
+        nome: "Cálculo em Tempo Real"
+        descricao: "Os cards numéricos (Total, Em andamento, Pendentes, Entregues) são contagens (COUNT) baseadas no status real atualizado das tabelas 'workflow_pipelines' e 'fiscal_documents_matrix'."
+      - id: "DSH-02"
+        nome: "Geração de Logs"
+        descricao: "O BFF deve disparar um insert na tabela 'activity_logs' sempre que: 1) Um novo cliente for criado; 2) Um pipeline avançar de etapa; 3) Um documento no checklist mudar para 'critical'."
