@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, FileText } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, FileText, BarChart3, ChevronRight, Building2, TrendingUp, Clock, Plus, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +29,21 @@ const MESES = [
   { id: 12, nome: 'Dezembro', sigla: 'Dez' },
 ];
 
+// ────────────────────────────────────────────────
+// Tipo auxiliar: Grupo de pipelines por empresa
+// ────────────────────────────────────────────────
+interface ClientGroup {
+  clientId: string;
+  client: Client;
+  pipelines: WorkflowPipeline[];
+  total: number;
+  concluidos: number;
+  emAndamento: number;
+  iniciados: number;
+  bloqueados: number;
+  progressPercent: number;
+}
+
 export default function FluxoTrabalho() {
   const { getUserName } = useAuth();
   const [pipelines, setPipelines] = useState<WorkflowPipeline[]>([]);
@@ -39,7 +54,7 @@ export default function FluxoTrabalho() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  // Modal Novo Pipeline
+  // Modal Nova Esteira
   const [selectedClientId, setSelectedClientId] = useState('');
   const [anoReferencia, setAnoReferencia] = useState<number>(2023);
   const [mesReferencia, setMesReferencia] = useState<number>(1);
@@ -53,12 +68,17 @@ export default function FluxoTrabalho() {
   const [detailModalNotes, setDetailModalNotes] = useState<string>('');
   const [savingDetail, setSavingDetail] = useState(false);
 
+  // Modal Visão Analítica
+  const [analyticGroup, setAnalyticGroup] = useState<ClientGroup | null>(null);
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // ────────────────────────────────────────────────
+  // Fetch de dados
+  // ────────────────────────────────────────────────
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Buscar fases do fluxo
       const { data: phasesData, error: phaseErr } = await supabase
         .from('workflow_phases')
         .select('*')
@@ -71,7 +91,6 @@ export default function FluxoTrabalho() {
       
       setPhases(activePhases);
 
-      // Buscar clientes
       const { data: clientsData, error: clientErr } = await supabase
         .from('clients')
         .select('*')
@@ -80,7 +99,6 @@ export default function FluxoTrabalho() {
       if (clientErr) throw clientErr;
       setClients(clientsData || []);
 
-      // Buscar checklists com status_geral 'completo'
       const { data: matrixData, error: matrixErr } = await supabase
         .from('fiscal_documents_matrix')
         .select('*, clients(*)')
@@ -89,7 +107,6 @@ export default function FluxoTrabalho() {
       if (matrixErr) console.error('Erro ao carregar checklists:', matrixErr);
       setCompleteChecklists(matrixData || []);
 
-      // Buscar atribuições de responsáveis para cada fase
       const { data: assignData, error: assErr } = await supabase
         .from('workflow_assignments')
         .select('*, responsavel_principal:team_members!responsavel_principal_id(*), responsavel_backup:team_members!responsavel_backup_id(*)');
@@ -97,7 +114,6 @@ export default function FluxoTrabalho() {
       if (assErr) console.error('Erro ao carregar responsáveis:', assErr);
       setAssignments(assignData || []);
 
-      // Buscar pipelines do Supabase
       const { data: pipeData, error: pipeErr } = await supabase
         .from('workflow_pipelines')
         .select('*, clients(*)')
@@ -105,8 +121,9 @@ export default function FluxoTrabalho() {
 
       if (pipeErr) throw pipeErr;
       setPipelines(pipeData || []);
-    } catch (err: any) {
-      console.error('Erro ao carregar pipelines:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Erro ao carregar pipelines:', message);
     } finally {
       setLoading(false);
     }
@@ -118,14 +135,67 @@ export default function FluxoTrabalho() {
 
   const totalSteps = phases.length || 5;
 
-  // Filtrar clientes que possuem pelo menos 1 período com status_geral = 'completo'
+  // ────────────────────────────────────────────────
+  // Agrupamento de pipelines por empresa (Visão Sintética)
+  // ────────────────────────────────────────────────
+  const clientGroups: ClientGroup[] = useMemo(() => {
+    const groupMap = new Map<string, WorkflowPipeline[]>();
+
+    for (const pipe of pipelines) {
+      const key = pipe.client_id;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key)!.push(pipe);
+    }
+
+    const groups: ClientGroup[] = [];
+    for (const [clientId, clientPipelines] of groupMap) {
+      const client = clientPipelines[0]?.clients || clients.find(c => c.id === clientId);
+      const total = clientPipelines.length;
+      const concluidos = clientPipelines.filter(p => p.status === 'concluido').length;
+      const emAndamento = clientPipelines.filter(p => p.status === 'em_andamento').length;
+      const iniciados = clientPipelines.filter(p => p.status === 'iniciado').length;
+      const bloqueados = clientPipelines.filter(p => p.status === 'bloqueado').length;
+      const progressPercent = total > 0 ? Math.round((concluidos / total) * 100) : 0;
+
+      // Ordenar pipelines por ano e mês (mais recente primeiro)
+      const sorted = [...clientPipelines].sort((a, b) => {
+        if (a.ano_referencia !== b.ano_referencia) return b.ano_referencia - a.ano_referencia;
+        return (b.mes_referencia || 0) - (a.mes_referencia || 0);
+      });
+
+      if (client) {
+        groups.push({
+          clientId,
+          client: client as Client,
+          pipelines: sorted,
+          total,
+          concluidos,
+          emAndamento,
+          iniciados,
+          bloqueados,
+          progressPercent,
+        });
+      }
+    }
+
+    // Ordenar grupos por nome da empresa
+    return groups.sort((a, b) => (a.client.razao_social || '').localeCompare(b.client.razao_social || ''));
+  }, [pipelines, clients]);
+
+  // ────────────────────────────────────────────────
+  // Filtros para modal Nova Esteira
+  // ────────────────────────────────────────────────
   const clientsWithCompleteChecklist = clients.filter(client =>
     completeChecklists.some(c => c.client_id === client.id)
   );
 
-  // Períodos completos disponíveis para o cliente selecionado
   const availablePeriodsForClient = completeChecklists.filter(c => c.client_id === selectedClientId);
 
+  // ────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────
   const handleClientChange = (clientId: string) => {
     setSelectedClientId(clientId);
     const periods = completeChecklists.filter(c => c.client_id === clientId);
@@ -185,8 +255,9 @@ export default function FluxoTrabalho() {
       setSelectedClientId('');
       setCaminhoRedeEtapa1('');
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao criar esteira: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao criar esteira: ' + message);
     }
   };
 
@@ -225,8 +296,9 @@ export default function FluxoTrabalho() {
       });
 
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao avançar etapa: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao avançar etapa: ' + message);
     }
   };
 
@@ -260,8 +332,9 @@ export default function FluxoTrabalho() {
       });
 
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao retornar etapa: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao retornar etapa: ' + message);
     }
   };
 
@@ -333,8 +406,9 @@ export default function FluxoTrabalho() {
       setDetailModalPipe(null);
       setDetailModalStepNum(null);
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao salvar detalhes da etapa: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao salvar detalhes da etapa: ' + message);
     } finally {
       setSavingDetail(false);
     }
@@ -359,13 +433,144 @@ export default function FluxoTrabalho() {
     return assignments.find(a => a.fase_fluxo === phaseObj.key);
   };
 
+  // Abrir modal analítico para uma empresa
+  const openAnalyticModal = (group: ClientGroup) => {
+    setAnalyticGroup(group);
+  };
+
+  // Abrir modal Nova Esteira pré-selecionando o cliente (a partir do analítico)
+  const openNewPipelineFromAnalytic = (clientId: string) => {
+    setAnalyticGroup(null);
+    handleClientChange(clientId);
+    setShowModal(true);
+  };
+
+  // Períodos completos do checklist que AINDA NÃO têm pipeline criado para um dado client
+  const getUnusedPeriodsForClient = (clientId: string): FiscalDocumentMatrix[] => {
+    const clientPipelines = pipelines.filter(p => p.client_id === clientId);
+    return completeChecklists.filter(c => {
+      if (c.client_id !== clientId) return false;
+      return !clientPipelines.some(
+        p => p.ano_referencia === c.ano_base && p.mes_referencia === c.mes_base
+      );
+    });
+  };
+
+  // ────────────────────────────────────────────────
+  // Sub-componente: Timeline compacta de etapas (reutilizado no modal analítico)
+  // ────────────────────────────────────────────────
+  const PipelineTimeline = ({ pipe, compact = false }: { pipe: WorkflowPipeline; compact?: boolean }) => {
+    const isConcluido = pipe.status === 'concluido';
+    const isEmAndamento = pipe.status === 'em_andamento';
+
+    return (
+      <div className={cn("relative w-full", compact ? "py-1" : "py-1.5 my-1")}>
+        {/* Linha de fundo */}
+        <div className="absolute top-[16px] left-4 right-4 h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full"></div>
+        {/* Linha de progresso */}
+        <div 
+          className={cn(
+            "absolute top-[16px] left-4 h-1 -translate-y-1/2 z-0 rounded-full transition-all duration-500",
+            isConcluido ? "bg-emerald-500" : "bg-indigo-600"
+          )}
+          style={{
+            width: isConcluido 
+              ? 'calc(100% - 2rem)' 
+              : `calc(${Math.round(((pipe.etapa_atual - 1) / Math.max(1, phases.length - 1)) * 100)}% * 0.9 + 5%)`
+          }}
+        ></div>
+        
+        <div 
+          className="grid gap-2 relative z-10 w-full px-2"
+          style={{ gridTemplateColumns: `repeat(${phases.length}, minmax(0, 1fr))` }}
+        >
+          {phases.map((phaseObj, index) => {
+            const stepNum = index + 1;
+            const stepName = phaseObj.nome;
+            const isCompleted = stepNum < pipe.etapa_atual || isConcluido;
+            const isCurrent = stepNum === pipe.etapa_atual && !isConcluido;
+            const isLocked = stepNum > pipe.etapa_atual;
+            const assign = getStepAssignment(stepNum);
+            const principalName = assign?.responsavel_principal?.nome;
+            const backupName = assign?.responsavel_backup?.nome;
+
+            return (
+              <div key={index} className={cn("flex flex-col items-center gap-1 transition-opacity", isLocked && "opacity-60")}>
+                {/* Círculo do Ícone */}
+                <div className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center shadow-xs relative transition-all shrink-0",
+                  isCompleted ? "bg-emerald-500 text-white" :
+                  isCurrent ? "bg-white border-2 border-indigo-600 shadow-md ring-3 ring-indigo-50" :
+                  "bg-slate-100 border border-slate-200"
+                )}>
+                  {isCompleted && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                  {isCurrent && isEmAndamento && <Hourglass className="w-3.5 h-3.5 text-indigo-600 animate-spin" />}
+                  {isCurrent && !isEmAndamento && <PlayCircle className="w-3.5 h-3.5 text-indigo-600" />}
+                  {isLocked && <Lock className="w-3 h-3 text-slate-400" />}
+                </div>
+
+                {/* Nome da Etapa */}
+                <span className={cn(
+                  "text-[10px] font-medium text-center leading-tight mt-0.5",
+                  isCurrent ? "text-indigo-700 font-bold" : "text-slate-700"
+                )}>
+                  {stepName}
+                </span>
+
+                {/* Responsáveis */}
+                {!compact && (
+                  <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
+                    {principalName ? (
+                      <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
+                        <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                        {principalName.split(' ')[0]}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
+                    )}
+                    {backupName && (
+                      <span className="text-[9px] text-slate-400 truncate max-w-[100px]" title={`Backup: ${backupName}`}>
+                        (Bk: {backupName.split(' ')[0]})
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ────────────────────────────────────────────────
+  // Sub-componente: Badge de status
+  // ────────────────────────────────────────────────
+  const StatusBadge = ({ status }: { status: PipelineStatusEnum }) => {
+    const isConcluido = status === 'concluido';
+    const isEmAndamento = status === 'em_andamento';
+    return (
+      <span className={cn(
+        "px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 capitalize whitespace-nowrap",
+        isConcluido ? "bg-emerald-100 text-emerald-700" :
+        isEmAndamento ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+      )}>
+        {status.replace('_', ' ')}
+      </span>
+    );
+  };
+
+  // ────────────────────────────────────────────────
+  // RENDER
+  // ────────────────────────────────────────────────
   return (
     <div className="flex flex-col w-full gap-8 relative p-2">
+      {/* Header */}
       <div className="flex flex-row justify-between items-end pb-4 border-b border-slate-200/50">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-semibold text-slate-900">Fluxo de Trabalho</h1>
           <p className="text-slate-600 text-base max-w-2xl">
-            Acompanhe o progresso de cada cliente através do pipeline de conformidade integrado ao Supabase.
+            Acompanhe o progresso de cada empresa através do pipeline de conformidade — visão sintética por empresa.
           </p>
         </div>
         <div className="flex gap-4">
@@ -384,189 +589,278 @@ export default function FluxoTrabalho() {
         </div>
       </div>
 
+      {/* Conteúdo Principal */}
       {loading ? (
         <div className="flex items-center justify-center p-12 text-slate-500 gap-2">
           <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
           Carregando fluxos de trabalho...
         </div>
-      ) : pipelines.length === 0 ? (
+      ) : clientGroups.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center text-slate-500 shadow-sm border border-slate-200">
           Nenhuma esteira de trabalho cadastrada no momento. Clique em "Nova Esteira" acima para iniciar.
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {pipelines.map((pipe) => {
-            const clientName = pipe.clients?.razao_social || 'Cliente não identificado';
-            const cnpj = pipe.clients?.cnpj || '-';
-            const initials = getInitials(clientName);
-            const isConcluido = pipe.status === 'concluido';
-            const isEmAndamento = pipe.status === 'em_andamento';
-            const mesObj = MESES.find(m => m.id === (pipe.mes_referencia || 1));
-            const periodLabel = `${mesObj?.nome || 'Mês ' + (pipe.mes_referencia || 1)} / ${pipe.ano_referencia}`;
-            const activeStepPath = getStepPath(pipe, pipe.etapa_atual);
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+          {/* ──────── VISÃO SINTÉTICA: 1 Card por Empresa ──────── */}
+          {clientGroups.map((group) => {
+            const initials = getInitials(group.client.razao_social);
+            const hasAllConcluido = group.total > 0 && group.concluidos === group.total;
 
             return (
-              <div key={pipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative overflow-hidden group hover:shadow-md transition-shadow duration-300">
-                {isConcluido && <div className="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>}
-                
-                {/* Cabeçalho do Card (Compacto) */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center relative shadow-xs border border-slate-200 shrink-0">
-                      <span className="text-base font-semibold text-indigo-700">{initials}</span>
-                      {isEmAndamento && (
-                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-amber-200 rounded-full flex items-center justify-center shadow-xs border border-white">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                        </div>
-                      )}
-                      {isConcluido && (
-                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full flex items-center justify-center shadow-xs border border-white">
-                          <Check className="w-2 h-2 text-white stroke-[3]" />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">{clientName}</h3>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">
-                        CNPJ: {cnpj} | <span className="font-semibold text-indigo-600">Período: {periodLabel}</span>
-                      </p>
-                    </div>
+              <div 
+                key={group.clientId} 
+                className={cn(
+                  "bg-white rounded-2xl shadow-sm border border-slate-200 p-5 relative overflow-hidden group hover:shadow-lg transition-all duration-300 flex flex-col gap-4",
+                  hasAllConcluido && "border-emerald-200"
+                )}
+              >
+                {/* Barra lateral de status */}
+                {hasAllConcluido && <div className="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>}
+                {group.emAndamento > 0 && !hasAllConcluido && <div className="absolute top-0 right-0 w-1.5 h-full bg-amber-400"></div>}
+
+                {/* Cabeçalho: Avatar + Nome + CNPJ */}
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 flex items-center justify-center shadow-xs border border-indigo-200/50 shrink-0">
+                    <span className="text-lg font-bold text-indigo-700">{initials}</span>
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-indigo-700 transition-colors leading-tight">
+                      {group.client.razao_social}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                      CNPJ: {group.client.cnpj || '-'}
+                    </p>
+                  </div>
+                </div>
 
-                  {/* Único Botão Detalhe & Badge Status */}
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      onClick={() => openDetailModal(pipe, pipe.etapa_atual)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 border border-indigo-200 rounded-xl text-xs font-semibold text-indigo-700 transition-all cursor-pointer shadow-2xs group/det"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-indigo-600 group-hover/det:scale-110 transition-transform" />
-                      <span>Detalhe</span>
-                    </button>
+                {/* Indicadores Resumidos */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="flex flex-col items-center bg-slate-50 rounded-xl px-2 py-2 border border-slate-100">
+                    <span className="text-lg font-bold text-slate-800">{group.total}</span>
+                    <span className="text-[9px] font-medium text-slate-500 uppercase tracking-wider">Total</span>
+                  </div>
+                  <div className="flex flex-col items-center bg-emerald-50 rounded-xl px-2 py-2 border border-emerald-100">
+                    <span className="text-lg font-bold text-emerald-700">{group.concluidos}</span>
+                    <span className="text-[9px] font-medium text-emerald-600 uppercase tracking-wider">Concluído</span>
+                  </div>
+                  <div className="flex flex-col items-center bg-amber-50 rounded-xl px-2 py-2 border border-amber-100">
+                    <span className="text-lg font-bold text-amber-700">{group.emAndamento}</span>
+                    <span className="text-[9px] font-medium text-amber-600 uppercase tracking-wider">Andamento</span>
+                  </div>
+                  <div className="flex flex-col items-center bg-blue-50 rounded-xl px-2 py-2 border border-blue-100">
+                    <span className="text-lg font-bold text-blue-700">{group.iniciados}</span>
+                    <span className="text-[9px] font-medium text-blue-600 uppercase tracking-wider">Iniciado</span>
+                  </div>
+                </div>
 
+                {/* Barra de Progresso Geral */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Progresso Geral</span>
                     <span className={cn(
-                      "px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 capitalize",
-                      isConcluido ? "bg-emerald-100 text-emerald-700" :
-                      isEmAndamento ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-700"
+                      "font-bold",
+                      group.progressPercent === 100 ? "text-emerald-700" : "text-indigo-700"
                     )}>
-                      {pipe.status.replace('_', ' ')}
+                      {group.progressPercent}%
                     </span>
                   </div>
-                </div>
-
-                {/* Linha do Tempo Compacta */}
-                <div className="relative w-full py-1.5 my-1">
-                  <div className="absolute top-[16px] left-4 right-4 h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full"></div>
-                  <div 
-                    className={cn(
-                      "absolute top-[16px] left-4 h-1 -translate-y-1/2 z-0 rounded-full transition-all duration-500",
-                      isConcluido ? "bg-emerald-500" : "bg-indigo-600"
-                    )}
-                    style={{
-                      width: isConcluido 
-                        ? 'calc(100% - 2rem)' 
-                        : `calc(${Math.round(((pipe.etapa_atual - 1) / Math.max(1, phases.length - 1)) * 100)}% * 0.9 + 5%)`
-                    }}
-                  ></div>
-                  
-                  <div 
-                    className="grid gap-2 relative z-10 w-full px-2"
-                    style={{ gridTemplateColumns: `repeat(${phases.length}, minmax(0, 1fr))` }}
-                  >
-                    {phases.map((phaseObj, index) => {
-                      const stepNum = index + 1;
-                      const stepName = phaseObj.nome;
-                      const isCompleted = stepNum < pipe.etapa_atual || isConcluido;
-                      const isCurrent = stepNum === pipe.etapa_atual && !isConcluido;
-                      const isLocked = stepNum > pipe.etapa_atual;
-                      const assign = getStepAssignment(stepNum);
-                      const principalName = assign?.responsavel_principal?.nome;
-                      const backupName = assign?.responsavel_backup?.nome;
-
-                      return (
-                        <div key={index} className={cn("flex flex-col items-center gap-1 transition-opacity", isLocked && "opacity-60")}>
-                          {/* Círculo do Ícone */}
-                          <div className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center shadow-xs relative transition-all shrink-0",
-                            isCompleted ? "bg-emerald-500 text-white" :
-                            isCurrent ? "bg-white border-2 border-indigo-600 shadow-md ring-3 ring-indigo-50" :
-                            "bg-slate-100 border border-slate-200"
-                          )}>
-                            {isCompleted && <Check className="w-4 h-4 text-white stroke-[3]" />}
-                            {isCurrent && isEmAndamento && <Hourglass className="w-4 h-4 text-indigo-600 animate-spin" />}
-                            {isCurrent && !isEmAndamento && <PlayCircle className="w-4 h-4 text-indigo-600" />}
-                            {isLocked && <Lock className="w-3.5 h-3.5 text-slate-400" />}
-                          </div>
-
-                          {/* Nome da Etapa */}
-                          <span className={cn(
-                            "text-[11px] font-medium text-center leading-tight mt-0.5",
-                            isCurrent ? "text-indigo-700 font-bold" : "text-slate-700"
-                          )}>
-                            {stepName}
-                          </span>
-
-                          {/* Bloco Responsáveis da Etapa Compacto */}
-                          <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
-                            {principalName ? (
-                              <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
-                                <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
-                                {principalName.split(' ')[0]}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
-                            )}
-                            {backupName && (
-                              <span className="text-[9px] text-slate-400 truncate max-w-[100px]" title={`Backup: ${backupName}`}>
-                                (Bk: {backupName.split(' ')[0]})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full rounded-full transition-all duration-700 ease-out",
+                        group.progressPercent === 100 ? "bg-emerald-500" : "bg-indigo-600"
+                      )}
+                      style={{ width: `${group.progressPercent}%` }}
+                    ></div>
                   </div>
                 </div>
 
-                {/* Rodapé do Card com Ações (Voltar e Avançar) - Compacto */}
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="text-xs text-slate-600">{pipe.mensagem_info || 'Sem informações.'}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Botão Voltar Etapa */}
-                    {pipe.etapa_atual > 1 && (
-                      <button 
-                        onClick={() => handleRegressStep(pipe)}
-                        className="text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1 border border-slate-200 px-3 py-1 rounded-lg hover:bg-slate-100 cursor-pointer shadow-2xs"
-                      >
-                        <ArrowLeft className="w-3 h-3" /> Voltar Etapa
-                      </button>
-                    )}
-
-                    {/* Botão Avançar Etapa */}
-                    {!isConcluido && (
-                      <button 
-                        onClick={() => handleAdvanceStep(pipe)}
-                        className="text-xs font-semibold text-white bg-indigo-700 hover:bg-indigo-800 transition-colors flex items-center gap-1 px-3.5 py-1 rounded-lg cursor-pointer shadow-2xs"
-                      >
-                        Avançar Etapa <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                {/* Botão Visão Analítica */}
+                <button
+                  onClick={() => openAnalyticModal(group)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 hover:border-indigo-300 rounded-xl text-sm font-semibold text-indigo-700 transition-all cursor-pointer shadow-2xs group/btn"
+                >
+                  <Eye className="w-4 h-4 text-indigo-600 group-hover/btn:scale-110 transition-transform" />
+                  Visão Analítica
+                  <ChevronRight className="w-4 h-4 text-indigo-400 group-hover/btn:translate-x-0.5 transition-transform" />
+                </button>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Modal Nova Esteira */}
+      {/* ──────── MODAL VISÃO ANALÍTICA ──────── */}
+      {analyticGroup && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] shadow-2xl border border-slate-200 relative flex flex-col overflow-hidden">
+            {/* Header do Modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-indigo-50/50 to-white shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center shadow-xs border border-indigo-200/50">
+                  <span className="text-base font-bold text-indigo-700">{getInitials(analyticGroup.client.razao_social)}</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">{analyticGroup.client.razao_social}</h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    CNPJ: {analyticGroup.client.cnpj || '-'} • {analyticGroup.total} esteira{analyticGroup.total !== 1 ? 's' : ''} registrada{analyticGroup.total !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Botão nova esteira a partir do analítico */}
+                {getUnusedPeriodsForClient(analyticGroup.clientId).length > 0 && (
+                  <button
+                    onClick={() => openNewPipelineFromAnalytic(analyticGroup.clientId)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-700 text-white rounded-xl text-xs font-semibold hover:bg-indigo-800 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Nova Esteira
+                  </button>
+                )}
+                <button 
+                  onClick={() => setAnalyticGroup(null)} 
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Indicadores resumidos no topo do modal */}
+            <div className="flex items-center gap-4 px-6 py-3 bg-slate-50/50 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                <span className="font-medium">{analyticGroup.concluidos} Concluído{analyticGroup.concluidos !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                <span className="font-medium">{analyticGroup.emAndamento} Em Andamento</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+                <span className="font-medium">{analyticGroup.iniciados} Iniciado{analyticGroup.iniciados !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+
+            {/* Lista de Pipelines (scrollable) */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="flex flex-col gap-4">
+                {analyticGroup.pipelines.map((pipe) => {
+                  const mesObj = MESES.find(m => m.id === (pipe.mes_referencia || 1));
+                  const periodLabel = `${mesObj?.nome || 'Mês ' + (pipe.mes_referencia || 1)} / ${pipe.ano_referencia}`;
+                  const isConcluido = pipe.status === 'concluido';
+                  const isEmAndamento = pipe.status === 'em_andamento';
+
+                  return (
+                    <div 
+                      key={pipe.id} 
+                      className={cn(
+                        "bg-white rounded-xl border p-4 relative overflow-hidden hover:shadow-md transition-shadow duration-200",
+                        isConcluido ? "border-emerald-200 bg-emerald-50/30" :
+                        isEmAndamento ? "border-amber-200 bg-amber-50/20" : "border-slate-200"
+                      )}
+                    >
+                      {/* Cabeçalho do período */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                            isConcluido ? "bg-emerald-100" :
+                            isEmAndamento ? "bg-amber-100" : "bg-indigo-50"
+                          )}>
+                            {isConcluido ? <Check className="w-4 h-4 text-emerald-600 stroke-[3]" /> :
+                             isEmAndamento ? <Clock className="w-4 h-4 text-amber-600" /> :
+                             <PlayCircle className="w-4 h-4 text-indigo-600" />}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-800">{periodLabel}</h4>
+                            <p className="text-[11px] text-slate-500">
+                              Etapa {pipe.etapa_atual} de {phases.length} • {pipe.mensagem_info || 'Sem informações'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openDetailModal(pipe, pipe.etapa_atual)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 border border-indigo-200 rounded-xl text-[11px] font-semibold text-indigo-700 transition-all cursor-pointer shadow-2xs"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            Detalhe
+                          </button>
+                          <StatusBadge status={pipe.status} />
+                        </div>
+                      </div>
+
+                      {/* Timeline de Etapas */}
+                      <PipelineTimeline pipe={pipe} compact />
+
+                      {/* Ações: Voltar / Avançar */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-end items-center gap-2">
+                        {pipe.etapa_atual > 1 && (
+                          <button 
+                            onClick={() => handleRegressStep(pipe)}
+                            className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1 border border-slate-200 px-3 py-1 rounded-lg hover:bg-slate-100 cursor-pointer shadow-2xs"
+                          >
+                            <ArrowLeft className="w-3 h-3" /> Voltar
+                          </button>
+                        )}
+                        {!isConcluido && (
+                          <button 
+                            onClick={() => handleAdvanceStep(pipe)}
+                            className="text-[11px] font-semibold text-white bg-indigo-700 hover:bg-indigo-800 transition-colors flex items-center gap-1 px-3.5 py-1 rounded-lg cursor-pointer shadow-2xs"
+                          >
+                            Avançar <ArrowRight className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Períodos disponíveis sem pipeline */}
+                {(() => {
+                  const unusedPeriods = getUnusedPeriodsForClient(analyticGroup.clientId);
+                  if (unusedPeriods.length === 0) return null;
+                  return (
+                    <div className="mt-2 p-4 bg-blue-50/50 border border-blue-200 border-dashed rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span className="text-xs font-semibold text-blue-800">
+                          {unusedPeriods.length} período{unusedPeriods.length !== 1 ? 's' : ''} com checklist completo sem esteira criada
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {unusedPeriods.map(p => {
+                          const mObj = MESES.find(m => m.id === p.mes_base);
+                          return (
+                            <span key={`${p.ano_base}-${p.mes_base}`} className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-[11px] font-medium">
+                              {mObj?.sigla || `M${p.mes_base}`}/{p.ano_base}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => openNewPipelineFromAnalytic(analyticGroup.clientId)}
+                        className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-indigo-700 text-white rounded-xl text-xs font-semibold hover:bg-indigo-800 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Criar Nova Esteira
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────── MODAL NOVA ESTEIRA ──────── */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
-            <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+            <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Nova Esteira de Trabalho</h3>
@@ -649,7 +943,7 @@ export default function FluxoTrabalho() {
         </div>
       )}
 
-      {/* Modal Detalhes da Esteira */}
+      {/* ──────── MODAL DETALHES DA ESTEIRA ──────── */}
       {detailModalPipe && detailModalStepNum && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-xl shadow-xl border border-slate-200 relative flex flex-col gap-5">
