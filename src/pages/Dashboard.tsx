@@ -204,7 +204,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Clientes por Segmento Card */}
           <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Clientes por Segmento</h3>
+            <div className="flex flex-col mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Clientes por Segmento</h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Cadastro de Clientes (`clients`)</p>
+            </div>
             <div className="flex-1 flex flex-col justify-around gap-3">
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-medium text-slate-700">
@@ -258,7 +261,10 @@ export default function Dashboard() {
 
           {/* Atividades por Responsável Card */}
           <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Atividades por Responsável</h3>
+            <div className="flex flex-col mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Atividades por Responsável</h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Histórico de Logs (`activity_logs`)</p>
+            </div>
             <div className="flex-1 flex flex-col justify-around gap-3">
               {userActivityStats.length === 0 ? (
                 <div className="text-xs text-slate-400 italic text-center py-4">Sem registros no momento</div>
