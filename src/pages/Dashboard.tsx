@@ -123,11 +123,16 @@ export default function Dashboard() {
 
       const totalAvailableFlows = activePipelines.length + unusedCompleteChecklists.length;
 
-      // Mapeia cada membro cadastrado e verifica se ele está atribuído como responsável (Principal ou Backup) no fluxo
+      // Mapeia cada membro cadastrado e verifica se ele está atribuído como responsável (global ou customizado na esteira)
       const userStatsArr = (teamMembersData || []).map(member => {
         const isAssignedInFlow = assignmentsData?.some(a => 
           a.responsavel_principal_id === member.id || a.responsavel_backup_id === member.id
-        );
+        ) || allPipelinesData?.some(p => {
+          if (!p.responsaveis_etapas) return false;
+          return Object.values(p.responsaveis_etapas as Record<string, { principal_id?: string; backup_id?: string }>).some(
+            resp => resp?.principal_id === member.id || resp?.backup_id === member.id
+          );
+        });
 
         return {
           usuario: member.nome,

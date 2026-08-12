@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, FileText, BarChart3, ChevronRight, Building2, TrendingUp, Clock, Plus, Eye } from 'lucide-react';
+import { GitMerge, Check, Hourglass, Lock, Info, ArrowRight, ArrowLeft, PlayCircle, Loader2, X, AlertTriangle, Folder, Copy, Pencil, Save, User, UserCheck, FileText, BarChart3, ChevronRight, Building2, TrendingUp, Clock, Plus, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { WorkflowPipeline, Client, PipelineStatusEnum, FiscalDocumentMatrix, WorkflowAssignment, FaseEnum, WorkflowPhase } from '../types';
+import { WorkflowPipeline, Client, PipelineStatusEnum, FiscalDocumentMatrix, WorkflowAssignment, FaseEnum, WorkflowPhase, TeamMember } from '../types';
 import { cn } from '../lib/utils';
 
 const DEFAULT_STEPS = [
@@ -51,6 +51,7 @@ export default function FluxoTrabalho() {
   const [completeChecklists, setCompleteChecklists] = useState<FiscalDocumentMatrix[]>([]);
   const [assignments, setAssignments] = useState<WorkflowAssignment[]>([]);
   const [phases, setPhases] = useState<WorkflowPhase[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
@@ -66,6 +67,8 @@ export default function FluxoTrabalho() {
   const [detailModalStepNum, setDetailModalStepNum] = useState<number | null>(null);
   const [detailModalPath, setDetailModalPath] = useState<string>('');
   const [detailModalNotes, setDetailModalNotes] = useState<string>('');
+  const [detailModalPrincipalId, setDetailModalPrincipalId] = useState<string>('');
+  const [detailModalBackupId, setDetailModalBackupId] = useState<string>('');
   const [savingDetail, setSavingDetail] = useState(false);
 
   // Modal Visão Analítica
@@ -106,6 +109,14 @@ export default function FluxoTrabalho() {
 
       if (matrixErr) console.error('Erro ao carregar checklists:', matrixErr);
       setCompleteChecklists(matrixData || []);
+
+      const { data: membersData, error: memErr } = await supabase
+        .from('team_members')
+        .select('*')
+        .order('nome');
+
+      if (memErr) console.error('Erro ao carregar membros:', memErr);
+      setMembers(membersData || []);
 
       const { data: assignData, error: assErr } = await supabase
         .from('workflow_assignments')
@@ -355,6 +366,35 @@ export default function FluxoTrabalho() {
     }
   };
 
+  const getStepResponsibles = (pipe: WorkflowPipeline, stepNum: number) => {
+    const stepKey = String(stepNum);
+    const custom = pipe.responsaveis_etapas?.[stepKey];
+    const phaseObj = phases[stepNum - 1];
+    const defaultAssign = phaseObj ? assignments.find(a => a.fase_fluxo === phaseObj.key) : undefined;
+
+    const principalId = (custom && custom.principal_id !== undefined)
+      ? (custom.principal_id || '')
+      : (defaultAssign?.responsavel_principal_id || '');
+
+    const backupId = (custom && custom.backup_id !== undefined)
+      ? (custom.backup_id || '')
+      : (defaultAssign?.responsavel_backup_id || '');
+
+    return { principalId, backupId };
+  };
+
+  const getStepAssignment = (pipe: WorkflowPipeline, stepNum: number) => {
+    const { principalId, backupId } = getStepResponsibles(pipe, stepNum);
+
+    const principal = principalId ? members.find(m => m.id === principalId) : undefined;
+    const backup = backupId ? members.find(m => m.id === backupId) : undefined;
+
+    return {
+      responsavel_principal: principal,
+      responsavel_backup: backup
+    };
+  };
+
   const getStepPath = (pipe: WorkflowPipeline, stepNum: number): string => {
     if (pipe.caminhos_rede_etapas && pipe.caminhos_rede_etapas[String(stepNum)]) {
       return pipe.caminhos_rede_etapas[String(stepNum)];
@@ -376,6 +416,10 @@ export default function FluxoTrabalho() {
     setDetailModalStepNum(initialStep);
     setDetailModalPath(getStepPath(pipe, initialStep));
     setDetailModalNotes(getStepNotes(pipe, initialStep));
+
+    const { principalId, backupId } = getStepResponsibles(pipe, initialStep);
+    setDetailModalPrincipalId(principalId);
+    setDetailModalBackupId(backupId);
   };
 
   const handleSwitchDetailStep = (stepNum: number) => {
@@ -383,6 +427,10 @@ export default function FluxoTrabalho() {
     setDetailModalStepNum(stepNum);
     setDetailModalPath(getStepPath(detailModalPipe, stepNum));
     setDetailModalNotes(getStepNotes(detailModalPipe, stepNum));
+
+    const { principalId, backupId } = getStepResponsibles(detailModalPipe, stepNum);
+    setDetailModalPrincipalId(principalId);
+    setDetailModalBackupId(backupId);
   };
 
   const handleSaveDetail = async () => {
@@ -397,11 +445,21 @@ export default function FluxoTrabalho() {
       const currentNotes = detailModalPipe.observacoes_etapas || {};
       const updatedNotes = { ...currentNotes, [stepNumStr]: detailModalNotes };
 
+      const currentResps = detailModalPipe.responsaveis_etapas || {};
+      const updatedResps = {
+        ...currentResps,
+        [stepNumStr]: {
+          principal_id: detailModalPrincipalId || null,
+          backup_id: detailModalBackupId || null
+        }
+      };
+
       const { error: upErr } = await supabase
         .from('workflow_pipelines')
         .update({
           caminhos_rede_etapas: updatedPaths,
           observacoes_etapas: updatedNotes,
+          responsaveis_etapas: updatedResps,
           caminho_rede: detailModalStepNum === 1 ? detailModalPath : (detailModalPipe.caminho_rede || detailModalPath),
           updated_at: new Date().toISOString()
         })
@@ -414,7 +472,7 @@ export default function FluxoTrabalho() {
 
       await logActivity({
         titulo: 'Detalhes da Etapa Atualizados',
-        descricao: `Caminho da rede e observações atualizados para a etapa ${detailModalStepNum} (${stepName}) de ${clientName}`,
+        descricao: `Caminho da rede, responsáveis e observações atualizados para a etapa ${detailModalStepNum} (${stepName}) de ${clientName}`,
         tipo_log: 'info',
         client_id: detailModalPipe.client_id,
         usuario_nome: getUserName()
@@ -442,12 +500,6 @@ export default function FluxoTrabalho() {
     const parts = name.trim().split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.slice(0, 2).toUpperCase();
-  };
-
-  const getStepAssignment = (stepNum: number) => {
-    const phaseObj = phases[stepNum - 1];
-    if (!phaseObj) return undefined;
-    return assignments.find(a => a.fase_fluxo === phaseObj.key);
   };
 
   // Abrir modal analítico para uma empresa
@@ -507,15 +559,23 @@ export default function FluxoTrabalho() {
             const isCompleted = stepNum < pipe.etapa_atual || isConcluido;
             const isCurrent = stepNum === pipe.etapa_atual && !isConcluido;
             const isLocked = stepNum > pipe.etapa_atual;
-            const assign = getStepAssignment(stepNum);
+            const assign = getStepAssignment(pipe, stepNum);
             const principalName = assign?.responsavel_principal?.nome;
             const backupName = assign?.responsavel_backup?.nome;
 
             return (
-              <div key={index} className={cn("flex flex-col items-center gap-1 transition-opacity", isLocked && "opacity-60")}>
+              <div 
+                key={index} 
+                onClick={() => openDetailModal(pipe, stepNum)}
+                className={cn(
+                  "flex flex-col items-center gap-1 transition-all cursor-pointer p-1 rounded-xl hover:bg-slate-100/70 group/step",
+                  isLocked && "opacity-60"
+                )}
+                title={`Clique para visualizar/editar responsáveis e notas da etapa ${stepNum} (${stepName})`}
+              >
                 {/* Círculo do Ícone */}
                 <div className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center shadow-xs relative transition-all shrink-0",
+                  "w-7 h-7 rounded-full flex items-center justify-center shadow-xs relative transition-all shrink-0 group-hover/step:scale-110",
                   isCompleted ? "bg-emerald-500 text-white" :
                   isCurrent ? "bg-white border-2 border-indigo-600 shadow-md ring-3 ring-indigo-50" :
                   "bg-slate-100 border border-slate-200"
@@ -535,7 +595,7 @@ export default function FluxoTrabalho() {
                 </span>
 
                 {/* Responsáveis */}
-                <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
+                <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5 group-hover/step:border-indigo-200 group-hover/step:bg-indigo-50/50 transition-colors">
                   {principalName ? (
                     <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
                       <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
@@ -1010,6 +1070,47 @@ export default function FluxoTrabalho() {
             </div>
 
             <div className="flex flex-col gap-4">
+              {/* Seleção de Responsáveis Customizados da Etapa */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                    <User className="w-3.5 h-3.5 text-indigo-600" />
+                    Responsável Principal (Etapa {detailModalStepNum})
+                  </label>
+                  <select
+                    value={detailModalPrincipalId}
+                    onChange={(e) => setDetailModalPrincipalId(e.target.value)}
+                    className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none cursor-pointer"
+                  >
+                    <option value="">-- Padrão das Configurações --</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nome} ({m.cargo})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    Responsável Backup (Etapa {detailModalStepNum})
+                  </label>
+                  <select
+                    value={detailModalBackupId}
+                    onChange={(e) => setDetailModalBackupId(e.target.value)}
+                    className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none cursor-pointer"
+                  >
+                    <option value="">-- Nenhum Backup --</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nome} ({m.cargo})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Caminho da Rede */}
               <div>
                 <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5 mb-1">
@@ -1046,7 +1147,7 @@ export default function FluxoTrabalho() {
                   Informações Livres / Observações da Etapa {detailModalStepNum} ({phases[detailModalStepNum - 1]?.nome})
                 </label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={detailModalNotes}
                   onChange={(e) => setDetailModalNotes(e.target.value)}
                   placeholder="Digite aqui qualquer informação, instruções, notas de acompanhamento ou links referentes a esta etapa..."

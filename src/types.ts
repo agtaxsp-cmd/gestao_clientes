@@ -34,6 +34,11 @@ export interface FiscalDocumentMatrix {
 
 export type PipelineStatusEnum = 'iniciado' | 'em_andamento' | 'concluido' | 'bloqueado';
 
+export interface StepResponsibles {
+  principal_id?: string | null;
+  backup_id?: string | null;
+}
+
 export interface WorkflowPipeline {
   id: string;
   client_id: string;
@@ -43,6 +48,7 @@ export interface WorkflowPipeline {
   caminho_rede?: string | null;
   caminhos_rede_etapas?: Record<string, string> | null;
   observacoes_etapas?: Record<string, string> | null;
+  responsaveis_etapas?: Record<string, StepResponsibles> | null;
   ano_referencia: number;
   mes_referencia?: number;
   created_at?: string;
