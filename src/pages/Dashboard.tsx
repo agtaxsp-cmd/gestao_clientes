@@ -107,7 +107,7 @@ export default function Dashboard() {
       if (errL) throw errL;
       setLogs(logsData || []);
 
-      // 5. Volume de Atividades por Responsável (Matriz de Atribuições + Checklist Etapa 1 + Fluxo Etapas 2+)
+      // 5. Volume de Atividades por Responsável (Matriz de Atribuições: Etapa 1 Checklist + Fluxos)
       const { data: teamMembersData } = await supabase.from('team_members').select('*');
       const { data: phasesData } = await supabase.from('workflow_phases').select('*').order('ordem', { ascending: true });
       const { data: assignmentsData } = await supabase.from('workflow_assignments').select('*');
@@ -136,37 +136,53 @@ export default function Dashboard() {
 
       const countsByUser: Record<string, number> = {};
 
-      const addActivity = (memberId?: string) => {
-        const userName = memberId ? (memberMap.get(memberId) || 'Não Distribuído') : 'Não Distribuído';
-        countsByUser[userName] = (countsByUser[userName] || 0) + 1;
+      const addActivityForMember = (memberId?: string) => {
+        if (!memberId) {
+          countsByUser['Não Distribuído'] = (countsByUser['Não Distribuído'] || 0) + 1;
+        } else {
+          const userName = memberMap.get(memberId) || 'Não Distribuído';
+          countsByUser[userName] = (countsByUser[userName] || 0) + 1;
+        }
       };
 
-      // A. Volume Etapa 1 (Arquivos / Checklist Fiscal): cada registro de checklist representa volume atrelado ao responsável da Etapa 1
+      // Função utilitária: adiciona atividade para TODOS os responsáveis (Principal E Backup) configurados na fase
+      const addActivityForPhase = (faseKey: string) => {
+        const resp = assignMap.get(faseKey);
+        if (!resp || (!resp.principal && !resp.backup)) {
+          addActivityForMember(undefined);
+        } else {
+          if (resp.principal) addActivityForMember(resp.principal);
+          if (resp.backup) addActivityForMember(resp.backup);
+        }
+      };
+
+      // A. Volume Etapa 1 (Arquivos / Checklist Fiscal): cada registro de checklist representa volume atrelado aos responsáveis da Etapa 1
       const etapa1Key = activePhases[0]?.key || 'coleta_arquivos';
-      const etapa1Resp = assignMap.get(etapa1Key);
       const totalChecklists = matrixData?.length || 0;
 
       for (let i = 0; i < totalChecklists; i++) {
-        addActivity(etapa1Resp?.principal);
+        addActivityForPhase(etapa1Key);
       }
 
-      // B. Volume Etapas 2+ (Fluxo de Trabalho): esteiras ativas nas etapas 2+ atreladas aos responsáveis de cada fase
+      // B. Volume no Fluxo de Trabalho: contabilizar para todos os responsáveis das etapas ativas/disponíveis no fluxo
       const activePipelines = allPipelinesData?.filter(p => p.status !== 'concluido') || [];
+
+      // 1) Esteiras ativas em andamento nas suas respectivas etapas do fluxo
       activePipelines.forEach(pipe => {
         const stepNum = pipe.etapa_atual || 2;
         const phaseObj = activePhases[stepNum - 1] || activePhases[1];
-        const resp = assignMap.get(phaseObj?.key || '');
-        addActivity(resp?.principal);
+        if (phaseObj) {
+          addActivityForPhase(phaseObj.key);
+        }
       });
 
-      // C. Períodos com checklist completo sem esteira criada (disponíveis para processar na Etapa 2)
-      const etapa2Key = activePhases[1]?.key || 'calculadora_rtc';
-      const etapa2Resp = assignMap.get(etapa2Key);
-
+      // 2) Períodos com checklist completo disponíveis no fluxo (liberados a processar)
       matrixCompleta.forEach(m => {
         const hasPipeline = activePipelines.some(p => p.client_id === m.client_id && p.ano_referencia === m.ano_base && p.mes_referencia === m.mes_base);
         if (!hasPipeline) {
-          addActivity(etapa2Resp?.principal);
+          // Se o período está completo no checklist, as etapas do fluxo (a partir da Etapa 2) estão disponíveis para os responsáveis configurados
+          const etapa2Key = activePhases[1]?.key || 'calculadora_rtc';
+          addActivityForPhase(etapa2Key);
         }
       });
 
@@ -320,7 +336,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
             <div className="flex flex-col mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Atividades por Responsável</h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Matriz de Atribuições (Etapa 1 Checklist + Etapas 2+ Fluxo)</p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Matriz de Atribuições (Etapa 1 Checklist + Fluxos)</p>
             </div>
             <div className="flex-1 flex flex-col justify-around gap-3">
               {userActivityStats.length === 0 ? (
