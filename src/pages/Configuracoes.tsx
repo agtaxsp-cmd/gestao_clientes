@@ -263,19 +263,14 @@ export default function Configuracoes() {
     setPhases(reorderedPhases);
 
     try {
-      const updates = reorderedPhases.map(p => ({
-        id: p.id,
-        key: p.key,
-        nome: p.nome,
-        ordem: p.ordem,
-        color: p.color || 'bg-indigo-600'
-      }));
+      for (const p of reorderedPhases) {
+        const { error } = await supabase
+          .from('workflow_phases')
+          .update({ ordem: p.ordem })
+          .eq('id', p.id);
 
-      const { error } = await supabase
-        .from('workflow_phases')
-        .upsert(updates, { onConflict: 'id' });
-
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       await logActivity({
         titulo: 'Ordem das Fases Alterada',
@@ -283,8 +278,9 @@ export default function Configuracoes() {
         tipo_log: 'info',
         usuario_nome: getUserName()
       });
+      fetchData();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = (err as { message?: string })?.message || (err instanceof Error ? err.message : String(err));
       alert('Erro ao reordenar fases: ' + message);
       fetchData();
     }
