@@ -69,25 +69,30 @@ export default function Dashboard() {
         servico: serCount
       });
 
-      // 2. Esteiras em andamento
-      const { count: countPipelines, error: errP } = await supabase
-        .from('workflow_pipelines')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'em_andamento');
-      if (errP) throw errP;
-
-      // 3. Matriz com pendências ou críticas
+      // 3. Matriz de documentos fiscais
       const { data: matrixData, error: errM } = await supabase
         .from('fiscal_documents_matrix')
-        .select('status_geral');
+        .select('client_id, ano_base, mes_base, status_geral');
       if (errM) throw errM;
 
       const pendentesCount = matrixData?.filter(m => m.status_geral === 'pendente').length || 0;
       const criticosCount = matrixData?.filter(m => m.status_geral === 'atraso').length || 0;
+      const matrixCompleta = matrixData?.filter(m => m.status_geral === 'completo') || [];
+
+      // 2. Esteiras em andamento (apenas para períodos com checklist completo)
+      const { data: pipelinesData, error: errP } = await supabase
+        .from('workflow_pipelines')
+        .select('client_id, ano_referencia, mes_referencia, status')
+        .eq('status', 'em_andamento');
+      if (errP) throw errP;
+
+      const validEmAndamentoCount = pipelinesData?.filter(p =>
+        matrixCompleta.some(m => m.client_id === p.client_id && m.ano_base === p.ano_referencia && m.mes_base === p.mes_referencia)
+      ).length || 0;
 
       setStats({
         totalClients: totalClientsCount,
-        emAndamento: countPipelines || 0,
+        emAndamento: validEmAndamentoCount,
         pendentes: pendentesCount,
         criticos: criticosCount
       });
