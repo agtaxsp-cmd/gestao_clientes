@@ -105,7 +105,10 @@ export default function Dashboard() {
       // Calcular contagem de atividades por responsável
       const userCountsMap: Record<string, number> = {};
       logsData?.forEach(log => {
-        const u = log.usuario_nome || 'Sistema';
+        let u = log.usuario_nome;
+        if (!u || u === 'Administrador') {
+          u = 'Não Distribuído';
+        }
         userCountsMap[u] = (userCountsMap[u] || 0) + 1;
       });
 

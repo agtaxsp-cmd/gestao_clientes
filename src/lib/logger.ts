@@ -18,7 +18,7 @@ export async function logActivity({
     let activeUser = usuario_nome;
 
     // Se o nome não foi informado ou é o valor padrão estático, buscar o usuário logado no Supabase Auth
-    if (!activeUser || activeUser === 'Administrador') {
+    if (!activeUser || activeUser === 'Administrador' || activeUser === 'Não Distribuído') {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         activeUser =
@@ -27,7 +27,7 @@ export async function logActivity({
           user.email?.split('@')[0] ||
           'Usuário Autenticado';
       } else {
-        activeUser = 'Administrador';
+        activeUser = 'Não Distribuído';
       }
     }
 
