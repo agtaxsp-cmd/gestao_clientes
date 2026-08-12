@@ -112,8 +112,11 @@ export default function Dashboard() {
       const { data: assignmentsData } = await supabase.from('workflow_assignments').select('*');
       const { data: allPipelinesData } = await supabase.from('workflow_pipelines').select('*');
 
-      // Esteiras ativas + períodos com checklist completo disponíveis no fluxo
-      const activePipelines = allPipelinesData?.filter(p => p.status !== 'concluido') || [];
+      // Esteiras ativas com checklist completo + períodos completos ainda sem esteira iniciada
+      const activePipelines = (allPipelinesData || []).filter(p =>
+        p.status !== 'concluido' &&
+        matrixCompleta.some(m => m.client_id === p.client_id && m.ano_base === p.ano_referencia && m.mes_base === p.mes_referencia)
+      );
       const unusedCompleteChecklists = matrixCompleta.filter(m => 
         !activePipelines.some(p => p.client_id === m.client_id && p.ano_referencia === m.ano_base && p.mes_referencia === m.mes_base)
       );
