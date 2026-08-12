@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, Layers } from 'lucide-react';
+import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, Layers, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -85,8 +85,9 @@ export default function Configuracoes() {
       });
 
       setAssignments(assignMap);
-    } catch (err: any) {
-      console.error('Erro ao carregar configurações:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Erro ao carregar configurações:', message);
     } finally {
       setLoading(false);
     }
@@ -125,8 +126,9 @@ export default function Configuracoes() {
       setIniciais('');
       setShowMemberModal(false);
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao adicionar membro: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao adicionar membro: ' + message);
     }
   };
 
@@ -149,8 +151,9 @@ export default function Configuracoes() {
       });
 
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao remover membro: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao remover membro: ' + message);
     }
   };
 
@@ -183,8 +186,9 @@ export default function Configuracoes() {
       setNovaFaseNome('');
       setShowPhaseModal(false);
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao criar fase: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao criar fase: ' + message);
     }
   };
 
@@ -207,8 +211,9 @@ export default function Configuracoes() {
 
       setEditingPhaseId(null);
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao atualizar nome da fase: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao atualizar nome da fase: ' + message);
     }
   };
 
@@ -222,6 +227,11 @@ export default function Configuracoes() {
 
       if (delErr) throw delErr;
 
+      await supabase
+        .from('workflow_assignments')
+        .delete()
+        .eq('fase_fluxo', phase.key);
+
       await logActivity({
         titulo: 'Fase Removida',
         descricao: `A etapa "${phase.nome}" foi removida das configurações`,
@@ -230,8 +240,53 @@ export default function Configuracoes() {
       });
 
       fetchData();
-    } catch (err: any) {
-      alert('Erro ao excluir fase: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao excluir fase: ' + message);
+    }
+  };
+
+  const handleMovePhase = async (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= phases.length) return;
+
+    const newPhases = [...phases];
+    const temp = newPhases[index];
+    newPhases[index] = newPhases[newIndex];
+    newPhases[newIndex] = temp;
+
+    const reorderedPhases = newPhases.map((p, i) => ({
+      ...p,
+      ordem: i + 1
+    }));
+
+    setPhases(reorderedPhases);
+
+    try {
+      const updates = reorderedPhases.map(p => ({
+        id: p.id,
+        key: p.key,
+        nome: p.nome,
+        ordem: p.ordem,
+        color: p.color || 'bg-indigo-600'
+      }));
+
+      const { error } = await supabase
+        .from('workflow_phases')
+        .upsert(updates, { onConflict: 'id' });
+
+      if (error) throw error;
+
+      await logActivity({
+        titulo: 'Ordem das Fases Alterada',
+        descricao: 'A ordem das etapas do fluxo foi reordenada com sucesso',
+        tipo_log: 'info',
+        usuario_nome: getUserName()
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao reordenar fases: ' + message);
+      fetchData();
     }
   };
 
@@ -269,9 +324,10 @@ export default function Configuracoes() {
       });
 
       alert('Matriz de atribuições salva com sucesso!');
-    } catch (err: any) {
-      console.error('Erro ao salvar atribuições:', err);
-      alert('Erro ao salvar atribuições: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Erro ao salvar atribuições:', message);
+      alert('Erro ao salvar atribuições: ' + message);
     } finally {
       setSavingAssignments(false);
     }
@@ -283,7 +339,7 @@ export default function Configuracoes() {
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-semibold text-slate-900">Configurações de Fluxo e Responsáveis</h1>
           <p className="text-slate-600 text-sm">
-            Gerencie as fases do processo, adicione/renomeie etapas e atribua os responsáveis da equipe.
+            Gerencie as fases do processo, adicione/renomeie/reordene etapas e atribua os responsáveis da equipe.
           </p>
         </div>
         <button 
@@ -359,7 +415,7 @@ export default function Configuracoes() {
                   <GitMerge className="w-5 h-5 text-indigo-600" />
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">Fases do Fluxo & Responsáveis</h2>
-                    <p className="text-xs text-slate-500">Adicione novas fases ou renomeie as etapas existentes do pipeline.</p>
+                    <p className="text-xs text-slate-500">Adicione novas fases, altere a ordem ou renomeie as etapas existentes do pipeline.</p>
                   </div>
                 </div>
                 <button
@@ -375,7 +431,7 @@ export default function Configuracoes() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="p-4 text-xs font-semibold text-slate-500 w-12 text-center">Etapa</th>
+                      <th className="p-4 text-xs font-semibold text-slate-500 w-20 text-center">Etapa / Ordem</th>
                       <th className="p-4 text-xs font-semibold text-slate-500 w-2/5">Nome da Fase do Fluxo</th>
                       <th className="p-4 text-xs font-semibold text-slate-500">Responsável Principal</th>
                       <th className="p-4 text-xs font-semibold text-slate-500">Responsável Backup</th>
@@ -383,15 +439,37 @@ export default function Configuracoes() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {phases.map((phase) => {
+                    {phases.map((phase, index) => {
                       const isEditing = editingPhaseId === phase.id;
 
                       return (
                         <tr key={phase.id || phase.key} className="group hover:bg-slate-50/50 transition-colors">
                           <td className="p-4 text-center">
-                            <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold inline-flex items-center justify-center">
-                              {phase.ordem}
-                            </span>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold inline-flex items-center justify-center shrink-0">
+                                {index + 1}
+                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={index === 0}
+                                  onClick={() => handleMovePhase(index, 'up')}
+                                  className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
+                                  title="Mover para cima"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={index === phases.length - 1}
+                                  onClick={() => handleMovePhase(index, 'down')}
+                                  className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
+                                  title="Mover para baixo"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
                           </td>
                           <td className="p-4">
                             {isEditing ? (
@@ -405,14 +483,14 @@ export default function Configuracoes() {
                                 />
                                 <button 
                                   onClick={() => handleSavePhaseName(phase)}
-                                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded cursor-pointer"
                                   title="Salvar Nome"
                                 >
                                   <Check className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => setEditingPhaseId(null)}
-                                  className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                                  className="p-1 text-slate-400 hover:bg-slate-100 rounded cursor-pointer"
                                   title="Cancelar"
                                 >
                                   <X className="w-4 h-4" />
@@ -426,7 +504,7 @@ export default function Configuracoes() {
                                     setEditingPhaseId(phase.id);
                                     setTempPhaseName(phase.nome);
                                   }}
-                                  className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover/phase:opacity-100 transition-opacity"
+                                  className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover/phase:opacity-100 transition-opacity cursor-pointer"
                                   title="Editar Nome da Fase"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
@@ -462,7 +540,7 @@ export default function Configuracoes() {
                             {phase.id && (
                               <button 
                                 onClick={() => handleDeletePhase(phase)}
-                                className="p-1.5 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                className="p-1.5 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                                 title="Excluir Fase"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -486,7 +564,7 @@ export default function Configuracoes() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
             <button 
               onClick={() => setShowMemberModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -528,7 +606,7 @@ export default function Configuracoes() {
               </div>
               <button 
                 type="submit" 
-                className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors"
+                className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors cursor-pointer"
               >
                 Cadastrar Membro
               </button>
@@ -543,32 +621,31 @@ export default function Configuracoes() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
             <button 
               onClick={() => setShowPhaseModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Incluir Nova Fase do Fluxo</h3>
             <p className="text-xs text-slate-500 mb-4">
-              A nova fase será inserida como Etapa {phases.length + 1} no pipeline de trabalho de todos os clientes.
+              Digite o nome da nova etapa. Ela será inserida no final da sequência do pipeline.
             </p>
             <form onSubmit={handleAddPhase} className="flex flex-col gap-4">
               <div>
-                <label className="text-xs font-medium text-slate-600">Nome da Nova Fase / Etapa</label>
+                <label className="text-xs font-medium text-slate-600">Nome da Etapa</label>
                 <input 
                   type="text" 
                   value={novaFaseNome}
                   onChange={(e) => setNovaFaseNome(e.target.value)}
-                  placeholder="Ex: Auditar Documentos Fiscal" 
+                  placeholder="Ex: Validação Fiscal Especial" 
                   required 
                   className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
-                  autoFocus
                 />
               </div>
               <button 
                 type="submit" 
                 className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors cursor-pointer"
               >
-                Criar Fase do Fluxo
+                Criar Fase
               </button>
             </form>
           </div>
