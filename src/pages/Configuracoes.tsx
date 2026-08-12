@@ -24,7 +24,8 @@ export default function Configuracoes() {
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
-  // Form para novos membros
+  // Form para membros (novo ou edição)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const [cargo, setCargo] = useState('');
   const [iniciais, setIniciais] = useState('');
@@ -97,38 +98,77 @@ export default function Configuracoes() {
     fetchData();
   }, []);
 
-  const handleAddMember = async (e: React.FormEvent) => {
+  const handleOpenAddMember = () => {
+    setEditingMemberId(null);
+    setNome('');
+    setCargo('');
+    setIniciais('');
+    setShowMemberModal(true);
+  };
+
+  const handleOpenEditMember = (member: TeamMember) => {
+    setEditingMemberId(member.id);
+    setNome(member.nome);
+    setCargo(member.cargo);
+    setIniciais(member.iniciais);
+    setShowMemberModal(true);
+  };
+
+  const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome || !cargo || !iniciais) return;
 
     try {
-      const { error: insErr } = await supabase
-        .from('team_members')
-        .insert({
-          nome,
-          cargo,
-          iniciais: iniciais.toUpperCase().slice(0, 3),
-          ui_color_bg: 'bg-indigo-100',
-          ui_color_text: 'text-indigo-700'
+      if (editingMemberId) {
+        // Atualizar membro existente
+        const { error: upErr } = await supabase
+          .from('team_members')
+          .update({
+            nome,
+            cargo,
+            iniciais: iniciais.toUpperCase().slice(0, 3)
+          })
+          .eq('id', editingMemberId);
+
+        if (upErr) throw upErr;
+
+        await logActivity({
+          titulo: 'Membro Atualizado',
+          descricao: `Os dados de ${nome} (${cargo}) foram atualizados`,
+          tipo_log: 'info',
+          usuario_nome: getUserName()
         });
+      } else {
+        // Criar novo membro
+        const { error: insErr } = await supabase
+          .from('team_members')
+          .insert({
+            nome,
+            cargo,
+            iniciais: iniciais.toUpperCase().slice(0, 3),
+            ui_color_bg: 'bg-indigo-100',
+            ui_color_text: 'text-indigo-700'
+          });
 
-      if (insErr) throw insErr;
+        if (insErr) throw insErr;
 
-      await logActivity({
-        titulo: 'Novo Membro da Equipe',
-        descricao: `${nome} (${cargo}) foi adicionado à equipe`,
-        tipo_log: 'success',
-        usuario_nome: getUserName()
-      });
+        await logActivity({
+          titulo: 'Novo Membro da Equipe',
+          descricao: `${nome} (${cargo}) foi adicionado à equipe`,
+          tipo_log: 'success',
+          usuario_nome: getUserName()
+        });
+      }
 
       setNome('');
       setCargo('');
       setIniciais('');
+      setEditingMemberId(null);
       setShowMemberModal(false);
       fetchData();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      alert('Erro ao adicionar membro: ' + message);
+      const message = (err as { message?: string })?.message || (err instanceof Error ? err.message : String(err));
+      alert('Erro ao salvar membro: ' + message);
     }
   };
 
@@ -364,7 +404,7 @@ export default function Configuracoes() {
                   Membros da Equipe ({members.length})
                 </h2>
                 <button 
-                  onClick={() => setShowMemberModal(true)}
+                  onClick={handleOpenAddMember}
                   className="text-indigo-600 hover:bg-indigo-50 p-1 rounded-full transition-colors cursor-pointer"
                   title="Adicionar Membro"
                 >
@@ -387,10 +427,17 @@ export default function Configuracoes() {
                         <span className="text-sm font-semibold text-slate-900 truncate">{member.nome}</span>
                         <span className="text-xs text-slate-500 truncate mt-0.5">{member.cargo}</span>
                       </div>
-                      <div className="flex items-center opacity-0 group-hover/member:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 opacity-0 group-hover/member:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleOpenEditMember(member)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                          title="Editar Membro"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button 
                           onClick={() => handleDeleteMember(member.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
                           title="Remover"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -554,7 +601,7 @@ export default function Configuracoes() {
         </div>
       )}
 
-      {/* Modal Adicionar Membro */}
+      {/* Modal Adicionar / Editar Membro */}
       {showMemberModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
@@ -564,8 +611,10 @@ export default function Configuracoes() {
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Adicionar Novo Membro</h3>
-            <form onSubmit={handleAddMember} className="flex flex-col gap-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">
+              {editingMemberId ? 'Editar Membro da Equipe' : 'Adicionar Novo Membro'}
+            </h3>
+            <form onSubmit={handleSaveMember} className="flex flex-col gap-4">
               <div>
                 <label className="text-xs font-medium text-slate-600">Nome Completo</label>
                 <input 
@@ -604,7 +653,7 @@ export default function Configuracoes() {
                 type="submit" 
                 className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors cursor-pointer"
               >
-                Cadastrar Membro
+                {editingMemberId ? 'Salvar Alterações' : 'Cadastrar Membro'}
               </button>
             </form>
           </div>
