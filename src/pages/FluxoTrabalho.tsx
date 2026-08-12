@@ -138,10 +138,25 @@ export default function FluxoTrabalho() {
   // ────────────────────────────────────────────────
   // Agrupamento de pipelines por empresa (Visão Sintética)
   // ────────────────────────────────────────────────
+  // ────────────────────────────────────────────────
+  // Agrupamento de pipelines por empresa (Visão Sintética)
+  // ────────────────────────────────────────────────
   const clientGroups: ClientGroup[] = useMemo(() => {
+    // Regra de Negócio: Filtrar apenas pipelines de períodos cujo checklist esteja 'completo' (Etapa 2+)
+    const validPipelines = pipelines.filter(p =>
+      completeChecklists.some(c => c.client_id === p.client_id && c.ano_base === p.ano_referencia && c.mes_base === p.mes_referencia)
+    );
+
     const groupMap = new Map<string, WorkflowPipeline[]>();
 
-    for (const pipe of pipelines) {
+    // Incluir clientes que possuem checklists completos
+    completeChecklists.forEach(c => {
+      if (!groupMap.has(c.client_id)) {
+        groupMap.set(c.client_id, []);
+      }
+    });
+
+    for (const pipe of validPipelines) {
       const key = pipe.client_id;
       if (!groupMap.has(key)) {
         groupMap.set(key, []);
@@ -182,7 +197,7 @@ export default function FluxoTrabalho() {
 
     // Ordenar grupos por nome da empresa
     return groups.sort((a, b) => (a.client.razao_social || '').localeCompare(b.client.razao_social || ''));
-  }, [pipelines, clients]);
+  }, [pipelines, clients, completeChecklists]);
 
   // ────────────────────────────────────────────────
   // Filtros para modal Nova Esteira
@@ -228,13 +243,15 @@ export default function FluxoTrabalho() {
 
       const clientObj = clients.find(c => c.id === selectedClientId);
 
+      // Regra de Negócio: Se o Checklist está completo, Etapa 1 (Arquivos) já está OK.
+      // A esteira avança automaticamente para Etapa 2 (Calculadora RTC).
       const { error: insErr } = await supabase
         .from('workflow_pipelines')
         .insert({
           client_id: selectedClientId,
-          status: 'iniciado',
-          etapa_atual: 1,
-          mensagem_info: mensagemInfo,
+          status: 'em_andamento',
+          etapa_atual: 2,
+          mensagem_info: 'Etapa 1 (Arquivos) concluída via Checklist Fiscal. Em andamento na etapa 2.',
           caminho_rede: caminhoRedeEtapa1 || null,
           caminhos_rede_etapas: initialPaths,
           ano_referencia: anoReferencia,
@@ -245,7 +262,7 @@ export default function FluxoTrabalho() {
 
       await logActivity({
         titulo: 'Nova Esteira Iniciada',
-        descricao: `Nova esteira criada para ${clientObj?.razao_social || 'Cliente'} (Período: Mês ${mesReferencia}/${anoReferencia})`,
+        descricao: `Nova esteira iniciada na Etapa 2 para ${clientObj?.razao_social || 'Cliente'} (Período: Mês ${mesReferencia}/${anoReferencia})`,
         tipo_log: 'success',
         client_id: selectedClientId,
         usuario_nome: getUserName()
