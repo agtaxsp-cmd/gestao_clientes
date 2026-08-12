@@ -518,23 +518,21 @@ export default function FluxoTrabalho() {
                 </span>
 
                 {/* Responsáveis */}
-                {!compact && (
-                  <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
-                    {principalName ? (
-                      <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
-                        <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
-                        {principalName.split(' ')[0]}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
-                    )}
-                    {backupName && (
-                      <span className="text-[9px] text-slate-400 truncate max-w-[100px]" title={`Backup: ${backupName}`}>
-                        (Bk: {backupName.split(' ')[0]})
-                      </span>
-                    )}
-                  </div>
-                )}
+                <div className="w-full flex flex-col items-center gap-0 text-[10px] text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 mt-0.5">
+                  {principalName ? (
+                    <span className={cn("flex items-center gap-1 font-medium truncate max-w-[110px]", isCurrent ? "text-indigo-900 font-semibold" : "text-slate-700")} title={`Responsável Principal: ${principalName}`}>
+                      <User className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                      {principalName.split(' ')[0]}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
+                  )}
+                  {backupName && (
+                    <span className="text-[9px] text-slate-400 truncate max-w-[100px]" title={`Backup: ${backupName}`}>
+                      (Bk: {backupName.split(' ')[0]})
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
