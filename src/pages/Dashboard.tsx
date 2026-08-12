@@ -97,30 +97,82 @@ export default function Dashboard() {
         criticos: criticosCount
       });
 
-      // 4. Logs de atividades & contagem por responsável
+      // 4. Logs de atividades recentes (feed de auditoria)
       const { data: logsData, error: errL } = await supabase
         .from('activity_logs')
         .select('*, clients(razao_social)')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(10);
 
       if (errL) throw errL;
-      setLogs(logsData?.slice(0, 10) || []);
+      setLogs(logsData || []);
 
-      // Calcular contagem de atividades por responsável
-      const userCountsMap: Record<string, number> = {};
-      logsData?.forEach(log => {
-        let u = log.usuario_nome;
-        if (!u || u === 'Administrador') {
-          u = 'Não Distribuído';
-        }
-        userCountsMap[u] = (userCountsMap[u] || 0) + 1;
+      // 5. Volume de Atividades por Responsável (Matriz de Atribuições + Checklist Etapa 1 + Fluxo Etapas 2+)
+      const { data: teamMembersData } = await supabase.from('team_members').select('*');
+      const { data: phasesData } = await supabase.from('workflow_phases').select('*').order('ordem', { ascending: true });
+      const { data: assignmentsData } = await supabase.from('workflow_assignments').select('*');
+      const { data: allPipelinesData } = await supabase.from('workflow_pipelines').select('*');
+
+      const memberMap = new Map<string, string>();
+      teamMembersData?.forEach(m => memberMap.set(m.id, m.nome));
+
+      const assignMap = new Map<string, { principal?: string; backup?: string }>();
+      assignmentsData?.forEach(a => {
+        assignMap.set(a.fase_fluxo, {
+          principal: a.responsavel_principal_id || undefined,
+          backup: a.responsavel_backup_id || undefined
+        });
       });
 
-      const userStatsArr = Object.entries(userCountsMap)
+      const activePhases = (phasesData && phasesData.length > 0)
+        ? phasesData
+        : [
+            { key: 'coleta_arquivos', ordem: 1 },
+            { key: 'calculadora_rtc', ordem: 2 },
+            { key: 'compliance_rtc', ordem: 3 },
+            { key: 'apuracao_assistida', ordem: 4 },
+            { key: 'entrega_apresentacao', ordem: 5 }
+          ];
+
+      const countsByUser: Record<string, number> = {};
+
+      const addActivity = (memberId?: string) => {
+        const userName = memberId ? (memberMap.get(memberId) || 'Não Distribuído') : 'Não Distribuído';
+        countsByUser[userName] = (countsByUser[userName] || 0) + 1;
+      };
+
+      // A. Volume Etapa 1 (Arquivos / Checklist Fiscal): cada registro de checklist representa volume atrelado ao responsável da Etapa 1
+      const etapa1Key = activePhases[0]?.key || 'coleta_arquivos';
+      const etapa1Resp = assignMap.get(etapa1Key);
+      const totalChecklists = matrixData?.length || 0;
+
+      for (let i = 0; i < totalChecklists; i++) {
+        addActivity(etapa1Resp?.principal);
+      }
+
+      // B. Volume Etapas 2+ (Fluxo de Trabalho): esteiras ativas nas etapas 2+ atreladas aos responsáveis de cada fase
+      const activePipelines = allPipelinesData?.filter(p => p.status !== 'concluido') || [];
+      activePipelines.forEach(pipe => {
+        const stepNum = pipe.etapa_atual || 2;
+        const phaseObj = activePhases[stepNum - 1] || activePhases[1];
+        const resp = assignMap.get(phaseObj?.key || '');
+        addActivity(resp?.principal);
+      });
+
+      // C. Períodos com checklist completo sem esteira criada (disponíveis para processar na Etapa 2)
+      const etapa2Key = activePhases[1]?.key || 'calculadora_rtc';
+      const etapa2Resp = assignMap.get(etapa2Key);
+
+      matrixCompleta.forEach(m => {
+        const hasPipeline = activePipelines.some(p => p.client_id === m.client_id && p.ano_referencia === m.ano_base && p.mes_referencia === m.mes_base);
+        if (!hasPipeline) {
+          addActivity(etapa2Resp?.principal);
+        }
+      });
+
+      const userStatsArr = Object.entries(countsByUser)
         .map(([usuario, count]) => ({ usuario, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 4);
+        .sort((a, b) => b.count - a.count);
 
       setUserActivityStats(userStatsArr);
     } catch (err: unknown) {
@@ -268,20 +320,20 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
             <div className="flex flex-col mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Atividades por Responsável</h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Histórico de Logs (`activity_logs`)</p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Matriz de Atribuições (Etapa 1 Checklist + Etapas 2+ Fluxo)</p>
             </div>
             <div className="flex-1 flex flex-col justify-around gap-3">
               {userActivityStats.length === 0 ? (
-                <div className="text-xs text-slate-400 italic text-center py-4">Sem registros no momento</div>
+                <div className="text-xs text-slate-400 italic text-center py-4">Sem atribuições no momento</div>
               ) : (
                 userActivityStats.map((item, idx) => {
                   const maxCount = userActivityStats[0]?.count || 1;
-                  const colors = ['bg-indigo-600', 'bg-sky-500', 'bg-amber-500', 'bg-slate-600'];
+                  const colors = ['bg-indigo-600', 'bg-sky-500', 'bg-amber-500', 'bg-emerald-600', 'bg-slate-600'];
                   return (
                     <div key={item.usuario} className="space-y-1.5">
                       <div className="flex justify-between text-xs font-medium text-slate-700">
-                        <span className="truncate max-w-[140px]" title={item.usuario}>{item.usuario}</span>
-                        <span className="font-semibold text-slate-900">{item.count} açõ{item.count > 1 ? 'es' : 'ao'}</span>
+                        <span className="truncate max-w-[150px]" title={item.usuario}>{item.usuario}</span>
+                        <span className="font-semibold text-slate-900">{item.count} atividade{item.count !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div 
