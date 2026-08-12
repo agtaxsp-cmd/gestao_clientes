@@ -107,88 +107,30 @@ export default function Dashboard() {
       if (errL) throw errL;
       setLogs(logsData || []);
 
-      // 5. Volume de Atividades por Responsável (Matriz de Atribuições: Etapa 1 Checklist + Fluxos)
-      const { data: teamMembersData } = await supabase.from('team_members').select('*');
-      const { data: phasesData } = await supabase.from('workflow_phases').select('*').order('ordem', { ascending: true });
+      // 5. Atividades por Responsável (Membros Cadastrados x Fluxos Disponíveis no Fluxo de Trabalho)
+      const { data: teamMembersData } = await supabase.from('team_members').select('*').order('nome');
       const { data: assignmentsData } = await supabase.from('workflow_assignments').select('*');
       const { data: allPipelinesData } = await supabase.from('workflow_pipelines').select('*');
 
-      const memberMap = new Map<string, string>();
-      teamMembersData?.forEach(m => memberMap.set(m.id, m.nome));
-
-      const assignMap = new Map<string, { principal?: string; backup?: string }>();
-      assignmentsData?.forEach(a => {
-        assignMap.set(a.fase_fluxo, {
-          principal: a.responsavel_principal_id || undefined,
-          backup: a.responsavel_backup_id || undefined
-        });
-      });
-
-      const activePhases = (phasesData && phasesData.length > 0)
-        ? phasesData
-        : [
-            { key: 'coleta_arquivos', ordem: 1 },
-            { key: 'calculadora_rtc', ordem: 2 },
-            { key: 'compliance_rtc', ordem: 3 },
-            { key: 'apuracao_assistida', ordem: 4 },
-            { key: 'entrega_apresentacao', ordem: 5 }
-          ];
-
-      const countsByUser: Record<string, number> = {};
-
-      const addActivityForMember = (memberId?: string) => {
-        if (!memberId) {
-          countsByUser['Não Distribuído'] = (countsByUser['Não Distribuído'] || 0) + 1;
-        } else {
-          const userName = memberMap.get(memberId) || 'Não Distribuído';
-          countsByUser[userName] = (countsByUser[userName] || 0) + 1;
-        }
-      };
-
-      // Função utilitária: adiciona atividade para TODOS os responsáveis (Principal E Backup) configurados na fase
-      const addActivityForPhase = (faseKey: string) => {
-        const resp = assignMap.get(faseKey);
-        if (!resp || (!resp.principal && !resp.backup)) {
-          addActivityForMember(undefined);
-        } else {
-          if (resp.principal) addActivityForMember(resp.principal);
-          if (resp.backup) addActivityForMember(resp.backup);
-        }
-      };
-
-      // A. Volume Etapa 1 (Arquivos / Checklist Fiscal): cada registro de checklist representa volume atrelado aos responsáveis da Etapa 1
-      const etapa1Key = activePhases[0]?.key || 'coleta_arquivos';
-      const totalChecklists = matrixData?.length || 0;
-
-      for (let i = 0; i < totalChecklists; i++) {
-        addActivityForPhase(etapa1Key);
-      }
-
-      // B. Volume no Fluxo de Trabalho: contabilizar para todos os responsáveis das etapas ativas/disponíveis no fluxo
+      // Esteiras ativas + períodos com checklist completo disponíveis no fluxo
       const activePipelines = allPipelinesData?.filter(p => p.status !== 'concluido') || [];
+      const unusedCompleteChecklists = matrixCompleta.filter(m => 
+        !activePipelines.some(p => p.client_id === m.client_id && p.ano_referencia === m.ano_base && p.mes_referencia === m.mes_base)
+      );
 
-      // 1) Esteiras ativas em andamento nas suas respectivas etapas do fluxo
-      activePipelines.forEach(pipe => {
-        const stepNum = pipe.etapa_atual || 2;
-        const phaseObj = activePhases[stepNum - 1] || activePhases[1];
-        if (phaseObj) {
-          addActivityForPhase(phaseObj.key);
-        }
-      });
+      const totalAvailableFlows = activePipelines.length + unusedCompleteChecklists.length;
 
-      // 2) Períodos com checklist completo disponíveis no fluxo (liberados a processar)
-      matrixCompleta.forEach(m => {
-        const hasPipeline = activePipelines.some(p => p.client_id === m.client_id && p.ano_referencia === m.ano_base && p.mes_referencia === m.mes_base);
-        if (!hasPipeline) {
-          // Se o período está completo no checklist, as etapas do fluxo (a partir da Etapa 2) estão disponíveis para os responsáveis configurados
-          const etapa2Key = activePhases[1]?.key || 'calculadora_rtc';
-          addActivityForPhase(etapa2Key);
-        }
-      });
+      // Mapeia cada membro cadastrado e verifica se ele está atribuído como responsável (Principal ou Backup) no fluxo
+      const userStatsArr = (teamMembersData || []).map(member => {
+        const isAssignedInFlow = assignmentsData?.some(a => 
+          a.responsavel_principal_id === member.id || a.responsavel_backup_id === member.id
+        );
 
-      const userStatsArr = Object.entries(countsByUser)
-        .map(([usuario, count]) => ({ usuario, count }))
-        .sort((a, b) => b.count - a.count);
+        return {
+          usuario: member.nome,
+          count: isAssignedInFlow ? totalAvailableFlows : 0
+        };
+      }).sort((a, b) => b.count - a.count);
 
       setUserActivityStats(userStatsArr);
     } catch (err: unknown) {
@@ -336,11 +278,11 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col border border-slate-200 justify-between">
             <div className="flex flex-col mb-4">
               <h3 className="text-lg font-semibold text-slate-900">Atividades por Responsável</h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Matriz de Atribuições (Etapa 1 Checklist + Fluxos)</p>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Origem: Responsáveis Cadastrados x Fluxos Disponíveis no Fluxo de Trabalho</p>
             </div>
             <div className="flex-1 flex flex-col justify-around gap-3">
               {userActivityStats.length === 0 ? (
-                <div className="text-xs text-slate-400 italic text-center py-4">Sem atribuições no momento</div>
+                <div className="text-xs text-slate-400 italic text-center py-4">Nenhum responsável cadastrado</div>
               ) : (
                 userActivityStats.map((item, idx) => {
                   const maxCount = userActivityStats[0]?.count || 1;
@@ -349,12 +291,12 @@ export default function Dashboard() {
                     <div key={item.usuario} className="space-y-1.5">
                       <div className="flex justify-between text-xs font-medium text-slate-700">
                         <span className="truncate max-w-[150px]" title={item.usuario}>{item.usuario}</span>
-                        <span className="font-semibold text-slate-900">{item.count} atividade{item.count !== 1 ? 's' : ''}</span>
+                        <span className="font-semibold text-slate-900">{item.count} fluxo{item.count !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                         <div 
                           className={`${colors[idx % colors.length]} h-full transition-all duration-500`}
-                          style={{ width: `${(item.count / maxCount) * 100}%` }}
+                          style={{ width: maxCount > 0 ? `${(item.count / maxCount) * 100}%` : '0%' }}
                         ></div>
                       </div>
                     </div>
