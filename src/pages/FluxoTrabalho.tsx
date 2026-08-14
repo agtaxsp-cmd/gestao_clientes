@@ -21,12 +21,15 @@ import {
   TeamMember, 
   FaseGrupoEnum 
 } from '../types';
+import { useLocation, useNavigate } from 'react-router-dom';
 import CompanyWorkflowCard from '../components/workflow/CompanyWorkflowCard';
 import WorkflowDetailModal from '../components/workflow/WorkflowDetailModal';
 import WorkflowAnalyticModal from '../components/workflow/WorkflowAnalyticModal';
 
 export default function FluxoTrabalho() {
   const { getUserName } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   
   // Dados principais
   const [clients, setClients] = useState<Client[]>([]);
@@ -113,6 +116,32 @@ export default function FluxoTrabalho() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Efeito para abrir modal da etapa vindo das Notificações / Atribuídas a Mim
+  useEffect(() => {
+    if (loading || clients.length === 0) return;
+
+    const locState = location.state as {
+      clientId?: string;
+      grupo?: FaseGrupoEnum;
+      stepNum?: number;
+      month?: number | null;
+    } | null;
+
+    if (locState?.clientId && locState?.grupo) {
+      const targetClient = clients.find(c => c.id === locState.clientId);
+      if (targetClient) {
+        openDetailModal(
+          targetClient,
+          locState.grupo,
+          locState.stepNum || 1,
+          locState.month
+        );
+        // Limpa o state para não reabrir em navegações futuras
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [loading, clients, location.state]);
 
   // Fases agrupadas
   const fasesDiagnostico = useMemo(() => {
