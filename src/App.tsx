@@ -51,6 +51,7 @@ function MainLayout() {
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/checklist" element={<Checklist />} />
             <Route path="/fluxo-de-trabalho" element={<FluxoTrabalho />} />
+            <Route path="/fluxo-trabalho" element={<Navigate to="/fluxo-de-trabalho" replace />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -242,11 +242,12 @@ export default function Checklist() {
 
       if (upsertErr) throw upsertErr;
 
-      // Auto-criar esteira se não existir para este cliente/período
+      // Auto-criar esteira de plano de ação se não existir para este cliente/período
       const { data: existingPipe } = await supabase
         .from('workflow_pipelines')
         .select('id')
         .eq('client_id', formClientId)
+        .eq('fase_grupo', 'fase_2')
         .eq('ano_referencia', formAno)
         .eq('mes_referencia', formMes)
         .maybeSingle();
@@ -256,9 +257,10 @@ export default function Checklist() {
           .from('workflow_pipelines')
           .insert({
             client_id: formClientId,
+            fase_grupo: 'fase_2',
             status: 'iniciado',
             etapa_atual: 1,
-            mensagem_info: 'Esteira iniciada automaticamente ao cadastrar checklist.',
+            mensagem_info: 'Plano de ação iniciado automaticamente ao cadastrar checklist.',
             ano_referencia: formAno,
             mes_referencia: formMes,
             caminhos_rede_etapas: {},
@@ -401,6 +403,7 @@ export default function Checklist() {
           .from('workflow_pipelines')
           .select('id')
           .eq('client_id', item.client_id)
+          .eq('fase_grupo', 'fase_2')
           .eq('ano_referencia', item.ano_base)
           .eq('mes_referencia', item.mes_base)
           .maybeSingle();
@@ -410,9 +413,10 @@ export default function Checklist() {
             .from('workflow_pipelines')
             .insert({
               client_id: item.client_id,
+              fase_grupo: 'fase_2',
               status: 'iniciado',
               etapa_atual: 1,
-              mensagem_info: 'Esteira iniciada automaticamente via importação em massa.',
+              mensagem_info: 'Plano de ação iniciado automaticamente via importação em massa.',
               ano_referencia: item.ano_base,
               mes_referencia: item.mes_base,
               caminhos_rede_etapas: {},

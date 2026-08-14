@@ -1,17 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, Layers, ArrowUp, ArrowDown } from 'lucide-react';
+import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { TeamMember, WorkflowAssignment, FaseEnum, WorkflowPhase } from '../types';
+import { TeamMember, WorkflowAssignment, WorkflowPhase, FaseGrupoEnum } from '../types';
+import { cn } from '../lib/utils';
 
-const DEFAULT_FASES: { key: string; name: string; color: string; ordem: number }[] = [
-  { key: 'coleta_arquivos', name: 'Arquivos', color: 'bg-slate-500', ordem: 1 },
-  { key: 'calculadora_rtc', name: 'Calculadora RTC', color: 'bg-indigo-500', ordem: 2 },
-  { key: 'compliance_rtc', name: 'Compliance RTC', color: 'bg-indigo-600', ordem: 3 },
-  { key: 'apuracao_assistida', name: 'Apuração Assistida', color: 'bg-indigo-700', ordem: 4 },
-  { key: 'entrega_apresentacao', name: 'Entrega e Apresentação', color: 'bg-emerald-500', ordem: 5 },
+const DEFAULT_FASES: { key: string; name: string; grupo_fase: FaseGrupoEnum; ordem: number; color: string }[] = [
+  // FASE 1 - DIAGNOSTICO
+  { key: 'outorga_sped', name: 'OUTORGA SPED', grupo_fase: 'fase_1', ordem: 1, color: 'bg-indigo-600' },
+  { key: 'outorga_apuracao_assistida', name: 'OUTORGA APURAÇÃO ASSISTIDA', grupo_fase: 'fase_1', ordem: 2, color: 'bg-indigo-600' },
+  { key: 'coleta_documental', name: 'COLETA DOCUMENTAL', grupo_fase: 'fase_1', ordem: 3, color: 'bg-indigo-600' },
+  { key: 'processamento_as_is', name: 'PROCESSAMENTO AS-IS', grupo_fase: 'fase_1', ordem: 4, color: 'bg-indigo-600' },
+  { key: 'apresentacao_as_is', name: 'APRESENTAÇÃO AS-IS', grupo_fase: 'fase_1', ordem: 5, color: 'bg-indigo-600' },
+  { key: 'processamento_to_be', name: 'PROCESSAMENTO TO-BE', grupo_fase: 'fase_1', ordem: 6, color: 'bg-indigo-600' },
+  { key: 'apresentacao_to_be', name: 'APRESENTAÇÃO TO-BE', grupo_fase: 'fase_1', ordem: 7, color: 'bg-indigo-600' },
+
+  // FASE 2 - PLANO DE AÇÃO
+  { key: 'elaborar', name: 'ELABORAR', grupo_fase: 'fase_2', ordem: 1, color: 'bg-blue-600' },
+  { key: 'acompanhamento', name: 'ACOMPANHAMENTO', grupo_fase: 'fase_2', ordem: 2, color: 'bg-blue-600' },
+
+  // FASE 3 - GOVERNANÇA
+  { key: 'auditoria', name: 'AUDITORIA', grupo_fase: 'fase_3', ordem: 1, color: 'bg-emerald-600' },
 ];
+
+const GRUPO_LABELS: Record<FaseGrupoEnum, { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; badge: string; badgeColor: string }> = {
+  fase_1: {
+    title: 'Fase 1 — Diagnóstico',
+    subtitle: 'Estrutura de diagnóstico inicial por empresa',
+    icon: Compass,
+    badge: 'Diagnóstico (7 Etapas)',
+    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+  },
+  fase_2: {
+    title: 'Fase 2 — Plano de Ação',
+    subtitle: 'Fluxo mensal / anual recorrente (visão do ano corrente, 12 meses)',
+    icon: FileCheck,
+    badge: 'Recorrente Mensal (2 Etapas)',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'
+  },
+  fase_3: {
+    title: 'Fase 3 — Governança',
+    subtitle: 'Auditoria fiscal mensal / anual recorrente (visão do ano corrente, 12 meses)',
+    icon: ShieldCheck,
+    badge: 'Recorrente Mensal (1 Etapa)',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  }
+};
 
 export default function Configuracoes() {
   const { getUserName } = useAuth();
@@ -21,10 +56,11 @@ export default function Configuracoes() {
 
   const [loading, setLoading] = useState(true);
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
-  // Form para membros (novo ou edição)
+  // Form para membros
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const [cargo, setCargo] = useState('');
@@ -32,6 +68,7 @@ export default function Configuracoes() {
 
   // Form para nova fase
   const [novaFaseNome, setNovaFaseNome] = useState('');
+  const [novaFaseGrupo, setNovaFaseGrupo] = useState<FaseGrupoEnum>('fase_1');
 
   // Edição inline de nome da fase
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
@@ -60,12 +97,12 @@ export default function Configuracoes() {
       if (phasesData && phasesData.length > 0) {
         currentPhases = phasesData;
       } else {
-        // Fallback default
         currentPhases = DEFAULT_FASES.map(f => ({
           id: f.key,
           key: f.key,
           nome: f.name,
           ordem: f.ordem,
+          grupo_fase: f.grupo_fase,
           color: f.color
         }));
       }
@@ -120,7 +157,6 @@ export default function Configuracoes() {
 
     try {
       if (editingMemberId) {
-        // Atualizar membro existente
         const { error: upErr } = await supabase
           .from('team_members')
           .update({
@@ -139,7 +175,6 @@ export default function Configuracoes() {
           usuario_nome: getUserName()
         });
       } else {
-        // Criar novo membro
         const { error: insErr } = await supabase
           .from('team_members')
           .insert({
@@ -202,23 +237,31 @@ export default function Configuracoes() {
     if (!novaFaseNome.trim()) return;
 
     try {
-      const newOrdem = phases.length + 1;
-      const newKey = `fase_custom_${Date.now()}`;
+      const phasesInGroup = phases.filter(p => p.grupo_fase === novaFaseGrupo);
+      const newOrdem = phasesInGroup.length + 1;
+      const newKey = `${novaFaseGrupo}_custom_${Date.now()}`;
 
       const { error: insErr } = await supabase
         .from('workflow_phases')
         .insert({
           key: newKey,
-          nome: novaFaseNome.trim(),
+          nome: novaFaseNome.trim().toUpperCase(),
+          grupo_fase: novaFaseGrupo,
           ordem: newOrdem,
-          color: 'bg-indigo-600'
+          color: novaFaseGrupo === 'fase_1' ? 'bg-indigo-600' : novaFaseGrupo === 'fase_2' ? 'bg-blue-600' : 'bg-emerald-600'
         });
 
       if (insErr) throw insErr;
 
+      await supabase
+        .from('workflow_assignments')
+        .insert({ fase_fluxo: newKey })
+        .select()
+        .single();
+
       await logActivity({
         titulo: 'Nova Fase Criada',
-        descricao: `Nova etapa do fluxo "${novaFaseNome.trim()}" criada (Ordem: ${newOrdem})`,
+        descricao: `Nova etapa "${novaFaseNome.trim().toUpperCase()}" adicionada na ${GRUPO_LABELS[novaFaseGrupo].title}`,
         tipo_log: 'success',
         usuario_nome: getUserName()
       });
@@ -237,14 +280,14 @@ export default function Configuracoes() {
     try {
       const { error: upErr } = await supabase
         .from('workflow_phases')
-        .update({ nome: tempPhaseName.trim() })
+        .update({ nome: tempPhaseName.trim().toUpperCase() })
         .eq('id', phase.id);
 
       if (upErr) throw upErr;
 
       await logActivity({
         titulo: 'Fase Renomeada',
-        descricao: `A etapa "${phase.nome}" foi renomeada para "${tempPhaseName.trim()}"`,
+        descricao: `A etapa "${phase.nome}" foi renomeada para "${tempPhaseName.trim().toUpperCase()}"`,
         tipo_log: 'info',
         usuario_nome: getUserName()
       });
@@ -258,7 +301,7 @@ export default function Configuracoes() {
   };
 
   const handleDeletePhase = async (phase: WorkflowPhase) => {
-    if (!confirm(`Tem certeza que deseja excluir a fase "${phase.nome}"?`)) return;
+    if (!confirm(`Tem certeza que deseja excluir a etapa "${phase.nome}"?`)) return;
     try {
       const { error: delErr } = await supabase
         .from('workflow_phases')
@@ -286,43 +329,39 @@ export default function Configuracoes() {
     }
   };
 
-  const handleMovePhase = async (index: number, direction: 'up' | 'down') => {
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= phases.length) return;
+  const handleMovePhaseInGroup = async (grupo: FaseGrupoEnum, indexInGroup: number, direction: 'up' | 'down') => {
+    const groupPhases = phases.filter(p => p.grupo_fase === grupo).sort((a, b) => a.ordem - b.ordem);
+    const targetIndex = direction === 'up' ? indexInGroup - 1 : indexInGroup + 1;
+    if (targetIndex < 0 || targetIndex >= groupPhases.length) return;
 
-    const newPhases = [...phases];
-    const temp = newPhases[index];
-    newPhases[index] = newPhases[newIndex];
-    newPhases[newIndex] = temp;
-
-    const reorderedPhases = newPhases.map((p, i) => ({
-      ...p,
-      ordem: i + 1
-    }));
-
-    setPhases(reorderedPhases);
+    const currentItem = groupPhases[indexInGroup];
+    const targetItem = groupPhases[targetIndex];
 
     try {
-      for (const p of reorderedPhases) {
-        const { error } = await supabase
-          .from('workflow_phases')
-          .update({ ordem: p.ordem })
-          .eq('id', p.id);
+      // Trocar ordens no banco
+      const { error: err1 } = await supabase
+        .from('workflow_phases')
+        .update({ ordem: targetItem.ordem })
+        .eq('id', currentItem.id);
+      if (err1) throw err1;
 
-        if (error) throw error;
-      }
+      const { error: err2 } = await supabase
+        .from('workflow_phases')
+        .update({ ordem: currentItem.ordem })
+        .eq('id', targetItem.id);
+      if (err2) throw err2;
 
       await logActivity({
         titulo: 'Ordem das Fases Alterada',
-        descricao: 'A ordem das etapas do fluxo foi reordenada com sucesso',
+        descricao: `Etapas reordenadas no bloco ${GRUPO_LABELS[grupo].title}`,
         tipo_log: 'info',
         usuario_nome: getUserName()
       });
+
       fetchData();
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message || (err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao reordenar fases: ' + message);
-      fetchData();
     }
   };
 
@@ -334,6 +373,7 @@ export default function Configuracoes() {
         [type]: value
       }
     }));
+    setSaveSuccess(false);
   };
 
   const handleSaveAssignments = async () => {
@@ -354,12 +394,13 @@ export default function Configuracoes() {
 
       await logActivity({
         titulo: 'Responsáveis Atualizados',
-        descricao: 'Matriz de responsáveis pelas etapas do fluxo de trabalho salva com sucesso',
+        descricao: 'Matriz de responsáveis pelas 3 fases do fluxo de trabalho salva com sucesso',
         tipo_log: 'info',
         usuario_nome: getUserName()
       });
 
-      alert('Matriz de atribuições salva com sucesso!');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Erro ao salvar atribuições:', message);
@@ -369,78 +410,95 @@ export default function Configuracoes() {
     }
   };
 
+  const phaseGroups: FaseGrupoEnum[] = ['fase_1', 'fase_2', 'fase_3'];
+
   return (
     <div className="flex flex-col w-full h-full p-2 relative gap-8">
-      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+      {/* Header Superior */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-4 border-b border-slate-200 gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-semibold text-slate-900">Configurações de Fluxo e Responsáveis</h1>
           <p className="text-slate-600 text-sm">
-            Gerencie as fases do processo, adicione/renomeie/reordene etapas e atribua os responsáveis da equipe.
+            Gerencie as fases do processo distribuídas em 3 blocos estruturais e atribua os responsáveis da equipe.
           </p>
         </div>
-        <button 
-          onClick={handleSaveAssignments}
-          disabled={savingAssignments}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
-        >
-          {savingAssignments ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Salvar Todas Atribuições
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSaveAssignments}
+            disabled={savingAssignments}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50",
+              saveSuccess 
+                ? "bg-emerald-600 text-white hover:bg-emerald-700" 
+                : "bg-indigo-700 text-white hover:bg-indigo-800"
+            )}
+          >
+            {savingAssignments ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : saveSuccess ? (
+              <CheckCircle2 className="w-4 h-4" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {saveSuccess ? 'Atribuições Salvas!' : 'Salvar Todas Atribuições'}
+          </button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center p-12 text-slate-500 gap-2">
+        <div className="flex items-center justify-center p-16 text-slate-500 gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-          Carregando membros e fases do fluxo...
+          <span className="text-sm font-medium">Carregando membros e fases do fluxo...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full">
-          {/* Equipe Section */}
+          {/* Seção Membros da Equipe */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col border border-slate-200">
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col border border-slate-200 sticky top-4">
               <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo-600" />
                   Membros da Equipe ({members.length})
                 </h2>
                 <button 
                   onClick={handleOpenAddMember}
-                  className="text-indigo-600 hover:bg-indigo-50 p-1 rounded-full transition-colors cursor-pointer"
+                  className="flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                   title="Adicionar Membro"
                 >
-                  <PlusCircle className="w-5 h-5" />
+                  <Plus className="w-3.5 h-3.5" />
+                  Novo Membro
                 </button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 max-h-[400px]">
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 max-h-[580px]">
                 {members.length === 0 ? (
                   <div className="text-center text-sm text-slate-400 py-8">
-                    Nenhum membro cadastrado. Clique no botão + acima.
+                    Nenhum membro cadastrado. Clique no botão acima para adicionar.
                   </div>
                 ) : (
                   members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl group/member border border-transparent hover:border-slate-200 transition-all">
-                      <div className={`w-10 h-10 rounded-full ${member.ui_color_bg || 'bg-indigo-100'} ${member.ui_color_text || 'text-indigo-700'} flex items-center justify-center font-semibold text-base shrink-0`}>
+                    <div key={member.id} className="flex items-center gap-3 p-3 bg-slate-50/80 rounded-xl group/member border border-transparent hover:border-slate-200 hover:bg-white transition-all shadow-2xs">
+                      <div className={`w-9 h-9 rounded-full ${member.ui_color_bg || 'bg-indigo-100'} ${member.ui_color_text || 'text-indigo-700'} flex items-center justify-center font-bold text-xs shrink-0`}>
                         {member.iniciais}
                       </div>
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="text-sm font-semibold text-slate-900 truncate">{member.nome}</span>
-                        <span className="text-xs text-slate-500 truncate mt-0.5">{member.cargo}</span>
+                        <span className="text-xs font-semibold text-slate-900 truncate">{member.nome}</span>
+                        <span className="text-[11px] text-slate-500 truncate">{member.cargo}</span>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover/member:opacity-100 transition-opacity">
                         <button 
                           onClick={() => handleOpenEditMember(member)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
                           title="Editar Membro"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button 
                           onClick={() => handleDeleteMember(member.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
                           title="Remover"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -450,153 +508,202 @@ export default function Configuracoes() {
             </div>
           </div>
 
-          {/* Matriz de Atribuições & Gerenciador de Fases */}
+          {/* Seção Fases do Fluxo & Responsáveis Separada em 3 Blocos */}
           <div className="lg:col-span-8 flex flex-col gap-6">
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col border border-slate-200">
-              <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                   <GitMerge className="w-5 h-5 text-indigo-600" />
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Fases do Fluxo & Responsáveis</h2>
-                    <p className="text-xs text-slate-500">Adicione novas fases, altere a ordem ou renomeie as etapas existentes do pipeline.</p>
+                  Fases do Fluxo de Trabalho & Responsáveis
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  As etapas estão organizadas em 3 fases respeitando o ciclo de diagnóstico e operação contínua.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPhaseModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                Nova Etapa
+              </button>
+            </div>
+
+            {/* 3 Blocos Visuais */}
+            {phaseGroups.map((grupoKey) => {
+              const meta = GRUPO_LABELS[grupoKey];
+              const IconComp = meta.icon;
+              const groupPhases = phases
+                .filter(p => p.grupo_fase === grupoKey)
+                .sort((a, b) => a.ordem - b.ordem);
+
+              return (
+                <div 
+                  key={grupoKey} 
+                  className="bg-white rounded-2xl shadow-xs overflow-hidden flex flex-col border border-slate-200 hover:shadow-md transition-shadow"
+                >
+                  {/* Cabeçalho do Bloco */}
+                  <div className="p-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs",
+                        grupoKey === 'fase_1' ? "bg-indigo-100 text-indigo-700" :
+                        grupoKey === 'fase_2' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                      )}>
+                        <IconComp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">{meta.title}</h3>
+                        <p className="text-[11px] text-slate-500">{meta.subtitle}</p>
+                      </div>
+                    </div>
+                    <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-semibold border self-start sm:self-auto", meta.badgeColor)}>
+                      {meta.badge}
+                    </span>
+                  </div>
+
+                  {/* Tabela de Etapas deste Bloco */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-200">
+                          <th className="p-3 text-[11px] font-semibold text-slate-500 w-16 text-center">Ordem</th>
+                          <th className="p-3 text-[11px] font-semibold text-slate-500 w-2/5">Nome da Etapa</th>
+                          <th className="p-3 text-[11px] font-semibold text-slate-500">Responsável Principal</th>
+                          <th className="p-3 text-[11px] font-semibold text-slate-500">Responsável Backup</th>
+                          <th className="p-3 text-[11px] font-semibold text-slate-500 w-12 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {groupPhases.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-6 text-center text-xs text-slate-400">
+                              Nenhuma etapa cadastrada neste bloco.
+                            </td>
+                          </tr>
+                        ) : (
+                          groupPhases.map((phase, indexInGroup) => {
+                            const isEditing = editingPhaseId === phase.id;
+
+                            return (
+                              <tr key={phase.id || phase.key} className="group hover:bg-slate-50/60 transition-colors">
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <span className={cn(
+                                      "w-6 h-6 rounded-full text-[11px] font-bold inline-flex items-center justify-center shrink-0",
+                                      grupoKey === 'fase_1' ? "bg-indigo-100 text-indigo-700" :
+                                      grupoKey === 'fase_2' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                                    )}>
+                                      {indexInGroup + 1}
+                                    </span>
+                                    <div className="flex flex-col gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={indexInGroup === 0}
+                                        onClick={() => handleMovePhaseInGroup(grupoKey, indexInGroup, 'up')}
+                                        className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
+                                        title="Mover para cima"
+                                      >
+                                        <ArrowUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={indexInGroup === groupPhases.length - 1}
+                                        onClick={() => handleMovePhaseInGroup(grupoKey, indexInGroup, 'down')}
+                                        className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
+                                        title="Mover para baixo"
+                                      >
+                                        <ArrowDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="p-3">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                      <input 
+                                        type="text"
+                                        value={tempPhaseName}
+                                        onChange={(e) => setTempPhaseName(e.target.value)}
+                                        className="px-2.5 py-1 border border-indigo-300 rounded-lg text-xs font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 w-full uppercase"
+                                        autoFocus
+                                      />
+                                      <button 
+                                        onClick={() => handleSavePhaseName(phase)}
+                                        className="p-1 text-emerald-600 hover:bg-emerald-50 rounded cursor-pointer"
+                                        title="Salvar Nome"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                      <button 
+                                        onClick={() => setEditingPhaseId(null)}
+                                        className="p-1 text-slate-400 hover:bg-slate-100 rounded cursor-pointer"
+                                        title="Cancelar"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between group/phase pr-2">
+                                      <span className="text-xs font-bold text-slate-800">{phase.nome}</span>
+                                      <button
+                                        onClick={() => {
+                                          setEditingPhaseId(phase.id);
+                                          setTempPhaseName(phase.nome);
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover/phase:opacity-100 transition-opacity cursor-pointer rounded"
+                                        title="Editar Nome da Etapa"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  <select 
+                                    value={assignments[phase.key]?.principal || ''}
+                                    onChange={(e) => handleAssignmentChange(phase.key, 'principal', e.target.value)}
+                                    className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 transition-all cursor-pointer"
+                                  >
+                                    <option value="">-- Sem Responsável Principal --</option>
+                                    {members.map(m => (
+                                      <option key={m.id} value={m.id}>{m.nome} ({m.cargo})</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="p-3">
+                                  <select 
+                                    value={assignments[phase.key]?.backup || ''}
+                                    onChange={(e) => handleAssignmentChange(phase.key, 'backup', e.target.value)}
+                                    className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all cursor-pointer"
+                                  >
+                                    <option value="">-- Sem Backup --</option>
+                                    {members.map(m => (
+                                      <option key={m.id} value={m.id}>{m.nome} ({m.cargo})</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {phase.id && (
+                                    <button 
+                                      onClick={() => handleDeletePhase(phase)}
+                                      className="p-1 text-slate-300 hover:text-red-600 rounded hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                                      title="Excluir Etapa"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowPhaseModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Incluir Nova Fase
-                </button>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200">
-                      <th className="p-4 text-xs font-semibold text-slate-500 w-20 text-center">Etapa / Ordem</th>
-                      <th className="p-4 text-xs font-semibold text-slate-500 w-2/5">Nome da Fase do Fluxo</th>
-                      <th className="p-4 text-xs font-semibold text-slate-500">Responsável Principal</th>
-                      <th className="p-4 text-xs font-semibold text-slate-500">Responsável Backup</th>
-                      <th className="p-4 text-xs font-semibold text-slate-500 w-10">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {phases.map((phase, index) => {
-                      const isEditing = editingPhaseId === phase.id;
-
-                      return (
-                        <tr key={phase.id || phase.key} className="group hover:bg-slate-50/50 transition-colors">
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold inline-flex items-center justify-center shrink-0">
-                                {index + 1}
-                              </span>
-                              <div className="flex flex-col gap-0.5">
-                                <button
-                                  type="button"
-                                  disabled={index === 0}
-                                  onClick={() => handleMovePhase(index, 'up')}
-                                  className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
-                                  title="Mover para cima"
-                                >
-                                  <ArrowUp className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={index === phases.length - 1}
-                                  onClick={() => handleMovePhase(index, 'down')}
-                                  className="p-0.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:hover:text-slate-400 cursor-pointer transition-colors"
-                                  title="Mover para baixo"
-                                >
-                                  <ArrowDown className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            {isEditing ? (
-                              <div className="flex items-center gap-2">
-                                <input 
-                                  type="text"
-                                  value={tempPhaseName}
-                                  onChange={(e) => setTempPhaseName(e.target.value)}
-                                  className="px-2 py-1 border border-indigo-300 rounded-md text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 w-full"
-                                  autoFocus
-                                />
-                                <button 
-                                  onClick={() => handleSavePhaseName(phase)}
-                                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded cursor-pointer"
-                                  title="Salvar Nome"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                                <button 
-                                  onClick={() => setEditingPhaseId(null)}
-                                  className="p-1 text-slate-400 hover:bg-slate-100 rounded cursor-pointer"
-                                  title="Cancelar"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between group/phase pr-2">
-                                <span className="text-sm font-semibold text-slate-900">{phase.nome}</span>
-                                <button
-                                  onClick={() => {
-                                    setEditingPhaseId(phase.id);
-                                    setTempPhaseName(phase.nome);
-                                  }}
-                                  className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover/phase:opacity-100 transition-opacity cursor-pointer"
-                                  title="Editar Nome da Fase"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <select 
-                              value={assignments[phase.key]?.principal || ''}
-                              onChange={(e) => handleAssignmentChange(phase.key, 'principal', e.target.value)}
-                              className="w-full h-9 px-2 bg-transparent border-b border-transparent group-hover:border-slate-200 hover:bg-slate-100 rounded text-xs font-medium text-indigo-700 focus:outline-none focus:border-indigo-600 transition-all cursor-pointer"
-                            >
-                              <option value="">-- Selecionar Principal --</option>
-                              {members.map(m => (
-                                <option key={m.id} value={m.id}>{m.nome} ({m.cargo})</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-4">
-                            <select 
-                              value={assignments[phase.key]?.backup || ''}
-                              onChange={(e) => handleAssignmentChange(phase.key, 'backup', e.target.value)}
-                              className="w-full h-9 px-2 bg-transparent border-b border-transparent group-hover:border-slate-200 hover:bg-slate-100 rounded text-xs font-medium text-slate-600 focus:outline-none focus:border-indigo-400 transition-all cursor-pointer"
-                            >
-                              <option value="">-- Selecionar Backup --</option>
-                              {members.map(m => (
-                                <option key={m.id} value={m.id}>{m.nome} ({m.cargo})</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-4 text-center">
-                            {phase.id && (
-                              <button 
-                                onClick={() => handleDeletePhase(phase)}
-                                className="p-1.5 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                                title="Excluir Fase"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -660,7 +767,7 @@ export default function Configuracoes() {
         </div>
       )}
 
-      {/* Modal Adicionar Nova Fase do Fluxo */}
+      {/* Modal Adicionar Nova Etapa do Fluxo */}
       {showPhaseModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative">
@@ -670,27 +777,40 @@ export default function Configuracoes() {
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Incluir Nova Fase do Fluxo</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Incluir Nova Etapa do Fluxo</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Digite o nome da nova etapa. Ela será inserida no final da sequência do pipeline.
+              Selecione o bloco da fase e digite o nome da nova etapa.
             </p>
             <form onSubmit={handleAddPhase} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-medium text-slate-600">Bloco / Fase do Fluxo</label>
+                <select 
+                  value={novaFaseGrupo}
+                  onChange={(e) => setNovaFaseGrupo(e.target.value as FaseGrupoEnum)}
+                  className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none bg-white"
+                >
+                  <option value="fase_1">Fase 1 — Diagnóstico</option>
+                  <option value="fase_2">Fase 2 — Plano de Ação</option>
+                  <option value="fase_3">Fase 3 — Governança</option>
+                </select>
+              </div>
+
               <div>
                 <label className="text-xs font-medium text-slate-600">Nome da Etapa</label>
                 <input 
                   type="text" 
                   value={novaFaseNome}
                   onChange={(e) => setNovaFaseNome(e.target.value)}
-                  placeholder="Ex: Validação Fiscal Especial" 
+                  placeholder="Ex: AUDITORIA EXTERNA" 
                   required 
-                  className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                  className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none uppercase"
                 />
               </div>
               <button 
                 type="submit" 
                 className="mt-2 w-full h-10 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 transition-colors cursor-pointer"
               >
-                Criar Fase
+                Criar Etapa
               </button>
             </form>
           </div>

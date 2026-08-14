@@ -34,6 +34,8 @@ export interface FiscalDocumentMatrix {
 
 export type PipelineStatusEnum = 'iniciado' | 'em_andamento' | 'concluido' | 'bloqueado';
 
+export type FaseGrupoEnum = 'fase_1' | 'fase_2' | 'fase_3';
+
 export interface StepResponsibles {
   principal_id?: string | null;
   backup_id?: string | null;
@@ -42,6 +44,7 @@ export interface StepResponsibles {
 export interface WorkflowPipeline {
   id: string;
   client_id: string;
+  fase_grupo: FaseGrupoEnum;
   status: PipelineStatusEnum;
   etapa_atual: number;
   mensagem_info?: string | null;
@@ -49,20 +52,32 @@ export interface WorkflowPipeline {
   caminhos_rede_etapas?: Record<string, string> | null;
   observacoes_etapas?: Record<string, string> | null;
   responsaveis_etapas?: Record<string, StepResponsibles> | null;
-  ano_referencia: number;
-  mes_referencia?: number;
+  ano_referencia?: number | null;
+  mes_referencia?: number | null;
   created_at?: string;
   updated_at?: string;
   clients?: Client;
 }
 
-export type FaseEnum = 'coleta_arquivos' | 'calculadora_rtc' | 'compliance_rtc' | 'apuracao_assistida' | 'entrega_apresentacao' | string;
+export type FaseEnum =
+  | 'outorga_sped'
+  | 'outorga_apuracao_assistida'
+  | 'coleta_documental'
+  | 'processamento_as_is'
+  | 'apresentacao_as_is'
+  | 'processamento_to_be'
+  | 'apresentacao_to_be'
+  | 'elaborar'
+  | 'acompanhamento'
+  | 'auditoria'
+  | string;
 
 export interface WorkflowPhase {
   id: string;
   key: string;
   nome: string;
   ordem: number;
+  grupo_fase: FaseGrupoEnum;
   color?: string;
   created_at?: string;
 }

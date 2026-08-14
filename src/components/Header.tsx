@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Bell, CheckCircle2, AlertCircle, Info, RefreshCw, LogOut, CheckCheck, X, User } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Info, RefreshCw, LogOut, CheckCheck, X, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -119,13 +119,9 @@ export default function Header({ collapsed = false }: HeaderProps) {
       "fixed top-0 right-0 h-16 bg-white/80 backdrop-blur-md z-40 px-8 flex items-center justify-between border-b border-slate-200/50 transition-all duration-300",
       collapsed ? "left-16" : "left-60"
     )}>
-      <div className="flex items-center bg-slate-100/80 px-4 py-2 rounded-full w-96 border border-slate-200/50 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
-        <Search className="w-5 h-5 text-slate-400 mr-2" />
-        <input
-          type="text"
-          placeholder="Buscar transações, clientes..."
-          className="bg-transparent border-none outline-none text-sm text-slate-900 w-full placeholder:text-slate-400"
-        />
+      {/* Área esquerda do Header */}
+      <div className="flex items-center gap-2">
+        {/* Espaço limpo sem filtro redundante */}
       </div>
 
       <div className="flex items-center gap-4 relative" ref={panelRef}>

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { Client, SegmentoEnum } from '../types';
+import { formatCNPJ, formatCNAE, cleanDigits } from '../lib/utils';
 
 const SEGMENTO_MAP: Record<SegmentoEnum, { label: string; bg: string; text: string; dot: string; bar: string }> = {
   industria: { label: 'Indústria', bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', bar: 'bg-emerald-500/80' },
@@ -52,8 +53,23 @@ export default function Clientes() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cnpj || !razaoSocial || !cnaePrincipal || !segmento) {
+    const formattedCnpj = formatCNPJ(cnpj);
+    const formattedCnae = formatCNAE(cnaePrincipal);
+    const cnpjDigits = cleanDigits(formattedCnpj);
+    const cnaeDigits = cleanDigits(formattedCnae);
+
+    if (!cnpjDigits || !razaoSocial.trim() || !cnaeDigits || !segmento) {
       alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    if (cnpjDigits.length !== 14) {
+      alert('CNPJ inválido: o CNPJ deve conter exatamente 14 dígitos.');
+      return;
+    }
+
+    if (cnaeDigits.length !== 7) {
+      alert('CNAE inválido: o CNAE deve conter exatamente 7 dígitos.');
       return;
     }
 
@@ -63,10 +79,10 @@ export default function Clientes() {
         const { error: updateErr } = await supabase
           .from('clients')
           .update({
-            cnpj,
-            nome_grupo: nomeGrupo || null,
-            razao_social: razaoSocial,
-            cnae_principal: cnaePrincipal,
+            cnpj: formattedCnpj,
+            nome_grupo: nomeGrupo.trim() || null,
+            razao_social: razaoSocial.trim(),
+            cnae_principal: formattedCnae,
             segmento: segmento as SegmentoEnum,
             updated_at: new Date().toISOString()
           })
@@ -76,7 +92,7 @@ export default function Clientes() {
 
         await logActivity({
           titulo: 'Cliente Atualizado',
-          descricao: `Os dados do cliente ${razaoSocial} (CNPJ: ${cnpj}) foram atualizados`,
+          descricao: `Os dados do cliente ${razaoSocial.trim()} (CNPJ: ${formattedCnpj}) foram atualizados`,
           tipo_log: 'info',
           client_id: editingId,
           usuario_nome: getUserName()
@@ -85,10 +101,10 @@ export default function Clientes() {
         const { data: inserted, error: insertErr } = await supabase
           .from('clients')
           .insert({
-            cnpj,
-            nome_grupo: nomeGrupo || null,
-            razao_social: razaoSocial,
-            cnae_principal: cnaePrincipal,
+            cnpj: formattedCnpj,
+            nome_grupo: nomeGrupo.trim() || null,
+            razao_social: razaoSocial.trim(),
+            cnae_principal: formattedCnae,
             segmento: segmento as SegmentoEnum
           })
           .select()
@@ -97,19 +113,15 @@ export default function Clientes() {
         if (insertErr) throw insertErr;
 
         if (inserted?.id) {
-          const now = new Date();
-          const currentYear = now.getFullYear();
-          const currentMonth = now.getMonth() + 1;
-
           const { error: pipeErr } = await supabase
             .from('workflow_pipelines')
             .insert({
               client_id: inserted.id,
+              fase_grupo: 'fase_1',
               status: 'iniciado',
               etapa_atual: 1,
-              mensagem_info: 'Esteira iniciada automaticamente ao cadastrar cliente.',
-              ano_referencia: currentYear,
-              mes_referencia: currentMonth,
+              mensagem_info: 'Fase 1 - Diagnóstico iniciada automaticamente ao cadastrar cliente.',
+              mes_referencia: null,
               caminhos_rede_etapas: {},
               observacoes_etapas: {}
             });
@@ -119,7 +131,7 @@ export default function Clientes() {
 
         await logActivity({
           titulo: 'Cliente Cadastrado',
-          descricao: `Novo cliente ${razaoSocial} (CNPJ: ${cnpj}) cadastrado e esteira iniciada automaticamente`,
+          descricao: `Novo cliente ${razaoSocial.trim()} (CNPJ: ${formattedCnpj}) cadastrado e fluxo de diagnóstico iniciado`,
           tipo_log: 'success',
           client_id: inserted?.id,
           usuario_nome: getUserName()
@@ -128,9 +140,10 @@ export default function Clientes() {
 
       resetForm();
       fetchClients();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao salvar cliente:', err);
-      alert('Erro ao salvar cliente: ' + (err.message || 'Verifique os dados'));
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Erro ao salvar cliente: ' + (msg || 'Verifique os dados'));
     } finally {
       setSaving(false);
     }
@@ -138,10 +151,10 @@ export default function Clientes() {
 
   const handleEdit = (client: Client) => {
     setEditingId(client.id);
-    setCnpj(client.cnpj);
+    setCnpj(formatCNPJ(client.cnpj));
     setNomeGrupo(client.nome_grupo || '');
     setRazaoSocial(client.razao_social);
-    setCnaePrincipal(client.cnae_principal);
+    setCnaePrincipal(formatCNAE(client.cnae_principal));
     setSegmento(client.segmento);
   };
 
@@ -219,10 +232,11 @@ export default function Clientes() {
                   type="text" 
                   id="cnpj" 
                   placeholder="00.000.000/0000-00" 
+                  maxLength={18}
                   value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
+                  onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
                   required
-                  className="w-full h-10 px-4 rounded-lg bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm" 
+                  className="w-full h-10 px-4 rounded-lg bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm font-mono" 
                 />
               </div>
               
@@ -258,10 +272,11 @@ export default function Clientes() {
                     type="text" 
                     id="cnae" 
                     placeholder="0000-0/00" 
+                    maxLength={9}
                     value={cnaePrincipal}
-                    onChange={(e) => setCnaePrincipal(e.target.value)}
+                    onChange={(e) => setCnaePrincipal(formatCNAE(e.target.value))}
                     required
-                    className="w-full h-10 px-4 rounded-lg bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm" 
+                    className="w-full h-10 px-4 rounded-lg bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm font-mono" 
                   />
                   <Hash className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
@@ -342,9 +357,9 @@ export default function Clientes() {
                   <thead>
                     <tr className="bg-white text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
                       <th className="px-6 py-4">Razão Social / Grupo</th>
-                      <th className="px-6 py-4">CNPJ</th>
-                      <th className="px-6 py-4">Segmento</th>
-                      <th className="px-6 py-4 text-right">Ações</th>
+                      <th className="px-6 py-4 whitespace-nowrap min-w-[200px]">CNPJ / CNAE</th>
+                      <th className="px-6 py-4 whitespace-nowrap">Segmento</th>
+                      <th className="px-6 py-4 text-right whitespace-nowrap">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
@@ -359,14 +374,19 @@ export default function Clientes() {
                               <span className="text-slate-500 text-[12px] mt-0.5">{client.nome_grupo || '-'}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 font-mono text-slate-600">{client.cnpj}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 font-mono text-slate-600 whitespace-nowrap">
+                            <div className="font-semibold text-slate-800 text-xs">{formatCNPJ(client.cnpj)}</div>
+                            {client.cnae_principal && (
+                              <div className="text-[11px] text-slate-400 font-normal mt-0.5">CNAE: {formatCNAE(client.cnae_principal)}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full ${segConfig.bg} ${segConfig.text} text-xs font-medium gap-1.5`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${segConfig.dot}`}></span>
                               {segConfig.label}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button 
                                 onClick={() => handleEdit(client)}
