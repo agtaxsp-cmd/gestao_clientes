@@ -177,6 +177,7 @@ export default function Dashboard() {
       const workloadList: TeamMemberWorkload[] = (teamMembersData || []).map((member: TeamMember) => {
         let principaisCount = 0;
         let backupCount = 0;
+        let concluidasCount = 0;
         let emAndamentoCount = 0;
 
         // Itera por todas as empresas cadastradas
@@ -198,9 +199,13 @@ export default function Dashboard() {
               ? customResp.backup_id
               : defAssign?.responsavel_backup_id;
 
+            const isStepConcluded = pipeF1?.status === 'concluido' || (pipeF1?.etapa_atual ? phase.ordem < pipeF1.etapa_atual : false);
+
             if (principalId === member.id) {
               principaisCount++;
-              if (pipeF1?.etapa_atual === phase.ordem && pipeF1?.status !== 'concluido') {
+              if (isStepConcluded) {
+                concluidasCount++;
+              } else if (pipeF1?.etapa_atual === phase.ordem && pipeF1?.status !== 'concluido') {
                 emAndamentoCount++;
               }
             }
@@ -232,9 +237,13 @@ export default function Dashboard() {
                 ? customResp.backup_id
                 : defAssign?.responsavel_backup_id;
 
+              const isStepConcluded = pipeF2?.status === 'concluido' || (pipeF2?.status === 'em_andamento' && phase.ordem < (pipeF2.etapa_atual || 1));
+
               if (principalId === member.id) {
                 principaisCount++;
-                if (pipeF2?.etapa_atual === phase.ordem && pipeF2?.status === 'em_andamento') {
+                if (isStepConcluded) {
+                  concluidasCount++;
+                } else if (pipeF2?.etapa_atual === phase.ordem && pipeF2?.status === 'em_andamento') {
                   emAndamentoCount++;
                 }
               }
@@ -267,9 +276,13 @@ export default function Dashboard() {
                 ? customResp.backup_id
                 : defAssign?.responsavel_backup_id;
 
+              const isStepConcluded = pipeF3?.status === 'concluido';
+
               if (principalId === member.id) {
                 principaisCount++;
-                if (pipeF3?.etapa_atual === phase.ordem && pipeF3?.status === 'em_andamento') {
+                if (isStepConcluded) {
+                  concluidasCount++;
+                } else if (pipeF3?.etapa_atual === phase.ordem && pipeF3?.status === 'em_andamento') {
                   emAndamentoCount++;
                 }
               }
@@ -284,7 +297,8 @@ export default function Dashboard() {
           id: member.id,
           usuario: member.nome,
           cargo: member.cargo || 'Consultor',
-          totalAtribuicoes: principaisCount + backupCount,
+          totalAtribuicoes: principaisCount,
+          concluidasAtribuicoes: concluidasCount,
           etapasPrincipais: principaisCount,
           etapasBackup: backupCount,
           etapasEmAndamento: emAndamentoCount
@@ -630,12 +644,13 @@ export default function Dashboard() {
               {userActivityStats.length === 0 ? (
                 <div className="text-xs text-slate-400 italic text-center py-6">Nenhum responsável cadastrado</div>
               ) : (
-                userActivityStats.map((item, idx) => {
-                  const maxCount = userActivityStats[0]?.totalAtribuicoes || 1;
-                  const colors = ['bg-indigo-600', 'bg-blue-500', 'bg-purple-500', 'bg-emerald-600', 'bg-slate-600'];
+                userActivityStats.map((item) => {
+                  const pct = item.totalAtribuicoes > 0 
+                    ? Math.round((item.concluidasAtribuicoes / item.totalAtribuicoes) * 100)
+                    : 0;
                   
                   return (
-                    <div key={item.id} className="space-y-1 p-2 rounded-xl bg-slate-50/70 border border-slate-100 hover:bg-slate-100/80 transition-colors">
+                    <div key={item.id} className="space-y-1.5 p-2 rounded-xl bg-slate-50/70 border border-slate-100 hover:bg-slate-100/80 transition-colors">
                       <div className="flex items-center justify-between text-xs font-medium text-slate-700">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-900 truncate max-w-[140px]" title={item.usuario}>
@@ -644,18 +659,23 @@ export default function Dashboard() {
                           <span className="text-[10px] text-slate-400 font-normal">{item.cargo}</span>
                         </div>
                         <div className="flex flex-col items-end">
-                          <span className="font-bold text-slate-900 text-xs">
-                            {item.totalAtribuicoes} etapa{item.totalAtribuicoes !== 1 ? 's' : ''}
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-0.5">
+                            <span className={item.concluidasAtribuicoes > 0 ? "text-emerald-600 font-extrabold" : "text-slate-900 font-bold"}>
+                              {item.concluidasAtribuicoes}
+                            </span>
+                            <span className="text-slate-400 font-normal">/</span>
+                            <span>{item.totalAtribuicoes}</span>
+                            <span className="text-[10px] font-normal text-slate-500 ml-1">etapas</span>
                           </span>
                           <span className="text-[10px] text-slate-500">
-                            {item.etapasPrincipais} princ. {item.etapasBackup > 0 ? `• ${item.etapasBackup} bkp` : ''}
+                            {item.totalAtribuicoes > 0 ? `${pct}% concluído` : 'Sem etapas'}
                           </span>
                         </div>
                       </div>
                       <div className="w-full bg-slate-200/80 h-1.5 rounded-full overflow-hidden">
                         <div 
-                          className={`${colors[idx % colors.length]} h-full transition-all duration-500`}
-                          style={{ width: maxCount > 0 ? `${(item.totalAtribuicoes / maxCount) * 100}%` : '0%' }}
+                          className="bg-emerald-500 h-full transition-all duration-500 rounded-full"
+                          style={{ width: item.totalAtribuicoes > 0 ? `${Math.max(item.concluidasAtribuicoes > 0 ? 4 : 0, pct)}%` : '0%' }}
                         ></div>
                       </div>
                     </div>
