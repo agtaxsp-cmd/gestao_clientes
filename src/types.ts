@@ -7,6 +7,7 @@ export interface Client {
   razao_social: string;
   cnae_principal: string;
   segmento: SegmentoEnum;
+  observacao?: string | null;
   ui_color?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -33,12 +34,19 @@ export interface FiscalDocumentMatrix {
 }
 
 export type PipelineStatusEnum = 'iniciado' | 'em_andamento' | 'concluido' | 'bloqueado';
+export type EtapaColorStatus = 'verde' | 'amarelo' | 'vermelho' | 'pendente';
 
 export type FaseGrupoEnum = 'fase_1' | 'fase_2' | 'fase_3';
+export type FaseTabEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'cronograma';
 
 export interface StepResponsibles {
   principal_id?: string | null;
   backup_id?: string | null;
+}
+
+export interface StepDates {
+  data_inicio?: string | null;
+  data_fim?: string | null;
 }
 
 export interface WorkflowPipeline {
@@ -52,6 +60,13 @@ export interface WorkflowPipeline {
   caminhos_rede_etapas?: Record<string, string> | null;
   observacoes_etapas?: Record<string, string> | null;
   responsaveis_etapas?: Record<string, StepResponsibles> | null;
+  periodo_escopo?: string | null;
+  start_as_is?: string | null;
+  start_to_be?: string | null;
+  status_etapas?: Record<string, EtapaColorStatus> | null;
+  datas_etapas?: Record<string, StepDates> | null;
+  responsaveis_multiplos_etapas?: Record<string, string[]> | null;
+  fases_desabilitadas?: Record<string, boolean> | null;
   ano_referencia?: number | null;
   mes_referencia?: number | null;
   created_at?: string;

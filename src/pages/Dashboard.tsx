@@ -12,7 +12,8 @@ import {
   Clock, 
   Database,
   ArrowUpRight,
-  UserCheck
+  UserCheck,
+  Search
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -59,8 +60,10 @@ export default function Dashboard() {
   const currentYear = new Date().getFullYear();
 
   // KPIs Globais
+  // KPIs Globais
   const [stats, setStats] = useState({
     totalClients: 0,
+    totalRaizCnpj: 0,
     fase1Concluidos: 0,
     fase1EmAndamento: 0,
     fase2ConcluidosAno: 0,
@@ -73,6 +76,8 @@ export default function Dashboard() {
   });
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [projectsTimeline, setProjectsTimeline] = useState<{ id: string; nomeGrupo: string; razaoSocial: string; raizCnpj: string; qtdFiliais: number; inicio?: string; fim?: string; status: string }[]>([]);
+  const [timelineSearch, setTimelineSearch] = useState<string>('');
 
   const [segmentStats, setSegmentStats] = useState<{ industria: number; comercio: number; servico: number }>({
     industria: 0,
@@ -86,13 +91,21 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // 1. Total Clientes e Segmentos (Origem: Tabela `clients`)
+      // 1. Total Clientes, Raiz CNPJ (Item 10) e Segmentos (Origem: Tabela `clients`)
       const { data: clientsData, error: errC } = await supabase
         .from('clients')
-        .select('id, razao_social, segmento');
+        .select('id, cnpj, razao_social, nome_grupo, segmento');
       if (errC) throw errC;
 
       const totalClientsCount = clientsData?.length || 0;
+      
+      // Calcular Raiz de CNPJ (8 primeiros dígitos numéricos)
+      const raizesUnicas = new Set((clientsData || []).map(c => {
+        const clean = c.cnpj.replace(/\D/g, '');
+        return clean.slice(0, 8);
+      }));
+      const totalRaizCount = raizesUnicas.size;
+
       const indCount = clientsData?.filter(c => c.segmento === 'industria').length || 0;
       const comCount = clientsData?.filter(c => c.segmento === 'comercio').length || 0;
       const serCount = clientsData?.filter(c => c.segmento === 'servico').length || 0;
@@ -131,7 +144,7 @@ export default function Dashboard() {
       // 4. Pipelines do Fluxo de Trabalho (Origem: Tabela `workflow_pipelines`)
       const { data: pipelinesData, error: errP } = await supabase
         .from('workflow_pipelines')
-        .select('id, client_id, status, fase_grupo, ano_referencia, mes_referencia, etapa_atual, responsaveis_etapas');
+        .select('*');
       if (errP) throw errP;
 
       const f1Done = pipelinesData?.filter(p => p.fase_grupo === 'fase_1' && p.status === 'concluido').length || 0;
@@ -145,6 +158,7 @@ export default function Dashboard() {
 
       setStats({
         totalClients: totalClientsCount,
+        totalRaizCnpj: totalRaizCount,
         fase1Concluidos: f1Done,
         fase1EmAndamento: f1InProgress,
         fase2ConcluidosAno: f2Done,
@@ -155,6 +169,58 @@ export default function Dashboard() {
         matrixPendente: pendentesCount,
         matrixCritico: criticosCount
       });
+
+      // Mapear dados da Timeline Resumida por Raiz do CNPJ / Grupo (Item 11)
+      const groupsMap: Record<string, {
+        raizCnpj: string;
+        nomeGrupo?: string | null;
+        razaoSocial: string;
+        qtdFiliais: number;
+        inicio?: string;
+        fim?: string;
+        status: string;
+      }> = {};
+
+      (clientsData || []).forEach(c => {
+        const clean = (c.cnpj || '').replace(/\D/g, '');
+        const raiz = clean.slice(0, 8) || c.id;
+        const pipe1 = pipelinesData?.find(p => p.client_id === c.id && p.fase_grupo === 'fase_1');
+
+        if (!groupsMap[raiz]) {
+          groupsMap[raiz] = {
+            raizCnpj: raiz.length === 8 ? `${raiz.slice(0,2)}.${raiz.slice(2,5)}.${raiz.slice(5,8)}` : raiz,
+            nomeGrupo: c.nome_grupo || null,
+            razaoSocial: c.razao_social,
+            qtdFiliais: 1,
+            inicio: pipe1?.start_as_is || undefined,
+            fim: pipe1?.start_to_be || undefined,
+            status: pipe1?.status || 'iniciado'
+          };
+        } else {
+          groupsMap[raiz].qtdFiliais += 1;
+          if (c.nome_grupo && !groupsMap[raiz].nomeGrupo) {
+            groupsMap[raiz].nomeGrupo = c.nome_grupo;
+          }
+          if (pipe1?.start_as_is && !groupsMap[raiz].inicio) {
+            groupsMap[raiz].inicio = pipe1.start_as_is;
+          }
+          if (pipe1?.start_to_be && !groupsMap[raiz].fim) {
+            groupsMap[raiz].fim = pipe1.start_to_be;
+          }
+        }
+      });
+
+      const timelineData = Object.values(groupsMap).map(g => ({
+        id: g.raizCnpj,
+        nomeGrupo: g.nomeGrupo || '-',
+        razaoSocial: g.razaoSocial,
+        raizCnpj: g.raizCnpj,
+        qtdFiliais: g.qtdFiliais,
+        inicio: g.inicio,
+        fim: g.fim,
+        status: g.status
+      }));
+      setProjectsTimeline(timelineData);
 
       // 5. Logs de atividades recentes (Origem: Tabela `activity_logs`)
       const { data: logsData, error: errL } = await supabase
@@ -339,24 +405,27 @@ export default function Dashboard() {
 
       {/* ──────── Top KPI Cards (Com Indicação de Origem de Dados) ──────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Total de Empresas */}
+        {/* Card 1: Total de Empresas & Raiz CNPJ (Item 10) */}
         <div className="bg-white rounded-2xl p-5 shadow-2xs border border-slate-200 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total de Empresas</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total de Empresas / Raiz CNPJ</span>
             <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-3xl font-bold text-slate-900">
+            <div className="text-3xl font-bold text-slate-900 flex items-baseline gap-2">
               <AnimatedCounter end={stats.totalClients} />
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                {stats.totalRaizCnpj} Grupos (Raiz)
+              </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Empresas ativas cadastradas</p>
+            <p className="text-xs text-slate-500 mt-1">CNPJs cadastrados | {stats.totalRaizCnpj} Raízes CNPJ únicas</p>
           </div>
           <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-mono">
             <span className="flex items-center gap-1">
               <Database className="w-3 h-3 text-indigo-500" />
-              Tabela: <strong className="text-slate-600 font-semibold">clients</strong>
+              Tabela: <strong className="text-slate-600 font-semibold">clients (cnpj)</strong>
             </span>
             <Link to="/clientes" className="text-indigo-600 hover:text-indigo-800 font-sans font-semibold flex items-center gap-0.5">
               Ver <ArrowUpRight className="w-3 h-3" />
@@ -725,6 +794,92 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ──────── Timeline Resumida dos Projetos (Item 11) ──────── */}
+      <div className="bg-white rounded-2xl p-6 shadow-2xs border border-slate-200 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-purple-600" />
+              Timeline Resumida dos Projetos (Diagnóstico)
+            </h3>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">
+              Alimentado por Start AS-IS e Start TO-BE do Fluxo de Trabalho
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Filtro por Grupo / Projeto ou Raiz CNPJ */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Filtrar por Grupo, Projeto ou Raiz CNPJ..."
+                value={timelineSearch}
+                onChange={(e) => setTimelineSearch(e.target.value)}
+                className="w-72 h-9 pl-9 pr-4 rounded-full bg-slate-100 text-xs text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-purple-100 focus:border-purple-300 border border-transparent transition-all placeholder:text-slate-400"
+              />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+
+            <Link to="/fluxo-de-trabalho" className="text-xs font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 shrink-0">
+              Ver Fluxo <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto scrollbar-thin rounded-xl border border-slate-100">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+              <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                <th className="py-2.5 px-4 bg-slate-50">Grupo Econômico</th>
+                <th className="py-2.5 px-4 bg-slate-50">Empresa</th>
+                <th className="py-2.5 px-4 text-center bg-slate-50">Qtd. Empresas</th>
+                <th className="py-2.5 px-4 text-center bg-slate-50">Raiz CNPJ</th>
+                <th className="py-2.5 px-4 text-center bg-slate-50">Start AS-IS</th>
+                <th className="py-2.5 px-4 text-center bg-slate-50">Start TO-BE</th>
+                <th className="py-2.5 px-4 bg-slate-50">Progresso do Diagnóstico</th>
+                <th className="py-2.5 px-4 text-center bg-slate-50">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs bg-white">
+              {projectsTimeline.filter((item) => {
+                const searchLower = timelineSearch.toLowerCase();
+                const cleanSearch = timelineSearch.replace(/\D/g, '');
+                const cleanRaiz = item.raizCnpj.replace(/\D/g, '');
+
+                const matchesGroup = item.nomeGrupo.toLowerCase().includes(searchLower);
+                const matchesName = item.razaoSocial.toLowerCase().includes(searchLower);
+                const matchesRaiz = item.raizCnpj.toLowerCase().includes(searchLower) || (cleanSearch.length > 0 && cleanRaiz.includes(cleanSearch));
+
+                return matchesGroup || matchesName || matchesRaiz;
+              }).map((item) => (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-4 font-semibold text-indigo-900">{item.nomeGrupo}</td>
+                  <td className="py-3 px-4 font-bold text-slate-800">{item.razaoSocial}</td>
+                  <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 border border-slate-200 text-slate-700 font-mono">
+                      {item.qtdFiliais} {item.qtdFiliais > 1 ? 'filiais' : 'matriz'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-center font-mono text-indigo-700 font-semibold">{item.raizCnpj}</td>
+                  <td className="py-3 px-4 text-center font-mono text-slate-600">{item.inicio ? item.inicio.split('-').reverse().join('/') : '--/--'}</td>
+                  <td className="py-3 px-4 text-center font-mono text-slate-600">{item.fim ? item.fim.split('-').reverse().join('/') : '--/--'}</td>
+                  <td className="py-3 px-4">
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
+                      <div className="bg-purple-600 h-full rounded-full w-2/3 transition-all"></div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center font-semibold text-slate-700 capitalize">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${item.status === 'concluido' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

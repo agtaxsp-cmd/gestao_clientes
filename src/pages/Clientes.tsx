@@ -27,6 +27,7 @@ export default function Clientes() {
   const [razaoSocial, setRazaoSocial] = useState('');
   const [cnaePrincipal, setCnaePrincipal] = useState('');
   const [segmento, setSegmento] = useState<SegmentoEnum | ''>('');
+  const [observacao, setObservacao] = useState('');
 
   const fetchClients = async () => {
     try {
@@ -84,6 +85,7 @@ export default function Clientes() {
             razao_social: razaoSocial.trim(),
             cnae_principal: formattedCnae,
             segmento: segmento as SegmentoEnum,
+            observacao: observacao.trim() || null,
             updated_at: new Date().toISOString()
           })
           .eq('id', editingId);
@@ -105,7 +107,8 @@ export default function Clientes() {
             nome_grupo: nomeGrupo.trim() || null,
             razao_social: razaoSocial.trim(),
             cnae_principal: formattedCnae,
-            segmento: segmento as SegmentoEnum
+            segmento: segmento as SegmentoEnum,
+            observacao: observacao.trim() || null
           })
           .select()
           .single();
@@ -156,6 +159,7 @@ export default function Clientes() {
     setRazaoSocial(client.razao_social);
     setCnaePrincipal(formatCNAE(client.cnae_principal));
     setSegmento(client.segmento);
+    setObservacao(client.observacao || '');
   };
 
   const handleDelete = async (id: string) => {
@@ -190,6 +194,7 @@ export default function Clientes() {
     setRazaoSocial('');
     setCnaePrincipal('');
     setSegmento('');
+    setObservacao('');
   };
 
   const filteredClients = clients.filter(c =>
@@ -207,9 +212,9 @@ export default function Clientes() {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8 w-full h-full">
+      <div className="flex flex-col lg:flex-row gap-8 w-full items-start">
         {/* Left Column: Form */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6">
+        <div className="w-full lg:w-1/3 flex flex-col gap-6" id="left-form-container">
           <div className="bg-[#f2ecf4] rounded-2xl shadow-sm p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-200/40 rounded-full blur-2xl -mr-16 -mt-16 transition-transform group-hover:scale-150 duration-700 ease-in-out"></div>
             
@@ -297,6 +302,18 @@ export default function Clientes() {
                   <option value="servico">Serviço</option>
                 </select>
               </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-600" htmlFor="observacao">Observação (Livre)</label>
+                <textarea
+                  id="observacao"
+                  rows={2}
+                  placeholder="Observações importantes sobre o cliente..."
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm resize-none"
+                />
+              </div>
               
               <button 
                 type="submit" 
@@ -321,9 +338,9 @@ export default function Clientes() {
         </div>
 
         {/* Right Column: Table */}
-        <div className="w-full lg:w-2/3 flex flex-col">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-            <div className="p-6 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
+        <div className="w-full lg:w-2/3 flex flex-col h-[670px]">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+            <div className="p-6 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-lg font-semibold text-slate-900">Lista de Clientes ({filteredClients.length})</h2>
@@ -342,7 +359,7 @@ export default function Clientes() {
               </div>
             </div>
             
-            <div className="overflow-x-auto flex-1">
+            <div className="overflow-x-auto flex-1 h-[580px] overflow-y-auto scrollbar-thin">
               {loading ? (
                 <div className="flex items-center justify-center p-12 text-slate-500 gap-2">
                   <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />

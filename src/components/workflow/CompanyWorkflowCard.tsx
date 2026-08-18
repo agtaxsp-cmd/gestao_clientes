@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Compass, FileCheck, ShieldCheck, Eye } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum } from '../../types';
+import { Compass, FileCheck, ShieldCheck, Eye, Calendar, Ban } from 'lucide-react';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum } from '../../types';
 import Phase1Stepper from './Phase1Stepper';
 import MonthRoulette from './MonthRoulette';
+import CompanyScheduleTab from './CompanyScheduleTab';
 import { MESES } from './types';
 import { cn, formatCNPJ, formatCNAE } from '../../lib/utils';
 
@@ -21,6 +22,9 @@ export interface CompanyWorkflowCardProps {
   onAdvanceMonthly: (client: Client, grupo: 'fase_2' | 'fase_3', month: number, year: number) => void;
   onOpenDetail: (client: Client, grupo: FaseGrupoEnum, stepNum: number, month?: number | null) => void;
   onOpenAnalytic: (client: Client) => void;
+  onTogglePhaseDisabled?: (client: Client, grupo: 'fase_2' | 'fase_3', disabled: boolean) => void;
+  onUpdateStepStatus?: (client: Client, stepNum: number, newStatus: 'verde' | 'amarelo' | 'vermelho' | 'pendente') => void;
+  onSavePeriodoEscopo?: (client: Client, periodo: string) => void;
 }
 
 export default function CompanyWorkflowCard({
@@ -36,9 +40,12 @@ export default function CompanyWorkflowCard({
   onRegressFase1,
   onAdvanceMonthly,
   onOpenDetail,
-  onOpenAnalytic
+  onOpenAnalytic,
+  onTogglePhaseDisabled,
+  onUpdateStepStatus,
+  onSavePeriodoEscopo
 }: CompanyWorkflowCardProps) {
-  const [activeTab, setActiveTab] = useState<FaseGrupoEnum>('fase_1');
+  const [activeTab, setActiveTab] = useState<FaseTabEnum>('fase_1');
 
   const getInitials = (name?: string) => {
     if (!name) return 'CL';
@@ -51,6 +58,15 @@ export default function CompanyWorkflowCard({
   const pipeFase1 = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
   const isFase1Concluido = pipeFase1?.status === 'concluido';
   const f1StepNum = pipeFase1?.etapa_atual || 1;
+
+  // Status das etapas (contagem verde)
+  const statusEtapas = pipeFase1?.status_etapas || {};
+  const greenCount = Object.values(statusEtapas).filter(s => s === 'verde').length;
+
+  // Fases Desabilitadas (Não Aplicáveis)
+  const fasesDesabilitadas = pipeFase1?.fases_desabilitadas || {};
+  const isFase2Disabled = !!fasesDesabilitadas['fase_2'];
+  const isFase3Disabled = !!fasesDesabilitadas['fase_3'];
 
   // Estatísticas Fase 2 do cliente
   const f2MonthsConcluidos = MESES.filter(m => {
@@ -86,6 +102,11 @@ export default function CompanyWorkflowCard({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-900">{client.razao_social}</h3>
+              {client.nome_grupo && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200">
+                  Grupo: {client.nome_grupo}
+                </span>
+              )}
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
                 {client.segmento}
               </span>
@@ -106,19 +127,25 @@ export default function CompanyWorkflowCard({
               : "bg-indigo-50 text-indigo-700 border-indigo-200"
           )}>
             <Compass className="w-3.5 h-3.5" />
-            <span>F1: {isFase1Concluido ? 'Diagnóstico Concluído' : `Etapa ${f1StepNum}/7`}</span>
+            <span>F1: {isFase1Concluido ? 'Diagnóstico Concluído' : `${greenCount}/7 Concluídos`}</span>
           </div>
 
           {/* Indicador Fase 2 */}
-          <div className="px-3 py-1.5 rounded-xl border bg-blue-50 text-blue-700 border-blue-200 text-xs font-semibold flex items-center gap-1.5">
+          <div className={cn(
+            "px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5",
+            isFase2Disabled ? "bg-slate-100 text-slate-400 border-slate-200 line-through" : "bg-blue-50 text-blue-700 border-blue-200"
+          )}>
             <FileCheck className="w-3.5 h-3.5" />
-            <span>F2: {f2MonthsConcluidos}/12 Meses ({selectedYear})</span>
+            <span>F2: {isFase2Disabled ? 'N/A Não Contratado' : `${f2MonthsConcluidos}/12 Meses (${selectedYear})`}</span>
           </div>
 
           {/* Indicador Fase 3 */}
-          <div className="px-3 py-1.5 rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200 text-xs font-semibold flex items-center gap-1.5">
+          <div className={cn(
+            "px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5",
+            isFase3Disabled ? "bg-slate-100 text-slate-400 border-slate-200 line-through" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+          )}>
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>F3: {f3MonthsConcluidos}/12 Auditados ({selectedYear})</span>
+            <span>F3: {isFase3Disabled ? 'N/A Não Contratado' : `${f3MonthsConcluidos}/12 Auditados (${selectedYear})`}</span>
           </div>
 
           {/* Botão Visão Analítica Completa */}
@@ -149,7 +176,7 @@ export default function CompanyWorkflowCard({
             "px-2 py-0.5 rounded-full text-[10px] font-bold",
             isFase1Concluido ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"
           )}>
-            {isFase1Concluido ? 'Concluído' : `${f1StepNum}/7`}
+            {isFase1Concluido ? 'Concluído' : `${greenCount}/7`}
           </span>
         </button>
 
@@ -157,6 +184,7 @@ export default function CompanyWorkflowCard({
           onClick={() => setActiveTab('fase_2')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
+            isFase2Disabled && "opacity-60 line-through",
             activeTab === 'fase_2'
               ? "border-blue-600 text-blue-700 bg-white rounded-t-lg shadow-2xs"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -164,15 +192,20 @@ export default function CompanyWorkflowCard({
         >
           <FileCheck className="w-4 h-4 text-blue-600" />
           <span>FASE 2 — PLANO DE AÇÃO ({selectedYear})</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-            {f2MonthsConcluidos}/12 Meses
-          </span>
+          {isFase2Disabled ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">N/A</span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+              {f2MonthsConcluidos}/12 Meses
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveTab('fase_3')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
+            isFase3Disabled && "opacity-60 line-through",
             activeTab === 'fase_3'
               ? "border-emerald-600 text-emerald-700 bg-white rounded-t-lg shadow-2xs"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -180,8 +213,29 @@ export default function CompanyWorkflowCard({
         >
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>FASE 3 — GOVERNANÇA ({selectedYear})</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
-            {f3MonthsConcluidos}/12 Meses
+          {isFase3Disabled ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">N/A</span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+              {f3MonthsConcluidos}/12 Meses
+            </span>
+          )}
+        </button>
+
+        {/* 4ª Aba: CRONOGRAMA */}
+        <button
+          onClick={() => setActiveTab('cronograma')}
+          className={cn(
+            "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
+            activeTab === 'cronograma'
+              ? "border-purple-600 text-purple-700 bg-white rounded-t-lg shadow-2xs"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <Calendar className="w-4 h-4 text-purple-600" />
+          <span>CRONOGRAMA</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">
+            Fase 1
           </span>
         </button>
       </div>
@@ -199,53 +253,107 @@ export default function CompanyWorkflowCard({
             onAdvance={onAdvanceFase1}
             onRegress={onRegressFase1}
             onOpenDetail={(c, g, s) => onOpenDetail(c, g, s, null)}
+            onUpdateStepStatus={onUpdateStepStatus ? (stepNum, st) => onUpdateStepStatus(client, stepNum, st) : undefined}
+            onSavePeriodoEscopo={onSavePeriodoEscopo ? (p) => onSavePeriodoEscopo(client, p) : undefined}
           />
         )}
 
         {/* FASE 2: PLANO DE AÇÃO */}
         {activeTab === 'fase_2' && (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Fluxo mensal com 2 etapas por mês (<strong>ELABORAR</strong> e <strong>ACOMPANHAMENTO</strong>) no ano {selectedYear}</span>
-              <span className="font-semibold text-blue-700">
-                {f2MonthsConcluidos} de 12 meses concluídos
-              </span>
+            <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span>Fluxo mensal com 2 etapas por mês (<strong>ELABORAR</strong> e <strong>ACOMPANHAMENTO</strong>) no ano {selectedYear}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onTogglePhaseDisabled && onTogglePhaseDisabled(client, 'fase_2', !isFase2Disabled)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer",
+                    isFase2Disabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                  )}
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  {isFase2Disabled ? 'Habilitar Fase 2' : 'Marcar como Não Aplicável (N/A)'}
+                </button>
+                <span className="font-semibold text-blue-700">
+                  {f2MonthsConcluidos} de 12 meses concluídos
+                </span>
+              </div>
             </div>
 
-            <MonthRoulette
-              client={client}
-              grupo="fase_2"
-              selectedYear={selectedYear}
-              pipelines={pipelines}
-              fasesPlanoAcao={fasesPlanoAcao}
-              fasesGovernanca={fasesGovernanca}
-              onAdvance={onAdvanceMonthly}
-              onOpenDetail={(c, g, s, m) => onOpenDetail(c, g, s, m)}
-            />
+            {isFase2Disabled ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs">
+                Esta fase foi marcada como <strong>Não Aplicável (Não Contratada)</strong> para este cliente.
+              </div>
+            ) : (
+              <MonthRoulette
+                client={client}
+                grupo="fase_2"
+                selectedYear={selectedYear}
+                pipelines={pipelines}
+                fasesPlanoAcao={fasesPlanoAcao}
+                fasesGovernanca={fasesGovernanca}
+                onAdvance={onAdvanceMonthly}
+                onOpenDetail={(c, g, s, m) => onOpenDetail(c, g, s, m)}
+              />
+            )}
           </div>
         )}
 
         {/* FASE 3: GOVERNANÇA */}
         {activeTab === 'fase_3' && (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Fluxo mensal de auditoria fiscal periódica (<strong>AUDITORIA</strong>) no ano {selectedYear}</span>
-              <span className="font-semibold text-emerald-700">
-                {f3MonthsConcluidos} de 12 auditorias concluídas
-              </span>
+            <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span>
+                  Fluxo mensal de governança ({fasesGovernanca.length || 1} etapas: <strong>{fasesGovernanca.map(f => f.nome).join(' ➔ ') || 'AUDITORIA'}</strong>) no ano {selectedYear}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onTogglePhaseDisabled && onTogglePhaseDisabled(client, 'fase_3', !isFase3Disabled)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer",
+                    isFase3Disabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                  )}
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  {isFase3Disabled ? 'Habilitar Fase 3' : 'Marcar como Não Aplicável (N/A)'}
+                </button>
+                <span className="font-semibold text-emerald-700">
+                  {f3MonthsConcluidos} de 12 auditorias concluídas
+                </span>
+              </div>
             </div>
 
-            <MonthRoulette
-              client={client}
-              grupo="fase_3"
-              selectedYear={selectedYear}
-              pipelines={pipelines}
-              fasesPlanoAcao={fasesPlanoAcao}
-              fasesGovernanca={fasesGovernanca}
-              onAdvance={onAdvanceMonthly}
-              onOpenDetail={(c, g, s, m) => onOpenDetail(c, g, s, m)}
-            />
+            {isFase3Disabled ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs">
+                Esta fase foi marcada como <strong>Não Aplicável (Não Contratada)</strong> para este cliente.
+              </div>
+            ) : (
+              <MonthRoulette
+                client={client}
+                grupo="fase_3"
+                selectedYear={selectedYear}
+                pipelines={pipelines}
+                fasesPlanoAcao={fasesPlanoAcao}
+                fasesGovernanca={fasesGovernanca}
+                onAdvance={onAdvanceMonthly}
+                onOpenDetail={(c, g, s, m) => onOpenDetail(c, g, s, m)}
+              />
+            )}
           </div>
+        )}
+
+        {/* 4ª ABA: CRONOGRAMA */}
+        {activeTab === 'cronograma' && (
+          <CompanyScheduleTab
+            client={client}
+            pipeFase1={pipeFase1}
+            fasesDiagnostico={fasesDiagnostico}
+            onOpenDetail={(stepNum) => onOpenDetail(client, 'fase_1', stepNum, null)}
+          />
         )}
       </div>
     </div>

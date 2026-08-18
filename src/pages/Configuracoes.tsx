@@ -21,7 +21,8 @@ const DEFAULT_FASES: { key: string; name: string; grupo_fase: FaseGrupoEnum; ord
   { key: 'acompanhamento', name: 'ACOMPANHAMENTO', grupo_fase: 'fase_2', ordem: 2, color: 'bg-blue-600' },
 
   // FASE 3 - GOVERNANÇA
-  { key: 'auditoria', name: 'AUDITORIA', grupo_fase: 'fase_3', ordem: 1, color: 'bg-emerald-600' },
+  { key: 'elaborar_fase3', name: 'ELABORAR', grupo_fase: 'fase_3', ordem: 1, color: 'bg-emerald-600' },
+  { key: 'envio_ao_cliente', name: 'ENVIO AO CLIENTE', grupo_fase: 'fase_3', ordem: 2, color: 'bg-emerald-600' },
 ];
 
 const GRUPO_LABELS: Record<FaseGrupoEnum, { title: string; subtitle: string; icon: React.ComponentType<{ className?: string }>; badge: string; badgeColor: string }> = {

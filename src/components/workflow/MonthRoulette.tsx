@@ -28,6 +28,7 @@ export default function MonthRoulette({
   grupo,
   selectedYear,
   pipelines,
+  fasesGovernanca = [],
   onAdvance,
   onOpenDetail
 }: MonthRouletteProps) {
@@ -207,17 +208,41 @@ export default function MonthRoulette({
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5 text-[11px]">
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className={cn("w-4 h-4", isConcluido ? "text-emerald-600" : "text-slate-400")} />
-                      <span className="font-semibold text-slate-700">Auditoria Fiscal</span>
+                  {fasesGovernanca.length > 0 ? (
+                    fasesGovernanca.map((f, idx) => {
+                      const stepIndex = idx + 1;
+                      const isDone = isConcluido || step > stepIndex;
+                      const isCurrent = step === stepIndex;
+
+                      return (
+                        <div key={f.id || f.key || idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/80 border border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className={cn("w-3.5 h-3.5", isDone ? "text-emerald-600" : isCurrent ? "text-blue-600 font-bold" : "text-slate-400")} />
+                            <span className="font-semibold text-slate-700">{stepIndex}. {f.nome}</span>
+                          </div>
+                          {isDone ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                          ) : isCurrent ? (
+                            <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                          ) : (
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className={cn("w-4 h-4", isConcluido ? "text-emerald-600" : "text-slate-400")} />
+                        <span className="font-semibold text-slate-700">Auditoria Fiscal</span>
+                      </div>
+                      {isConcluido ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      )}
                     </div>
-                    {isConcluido ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                    ) : (
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    )}
-                  </div>
+                  )}
                 </div>
               )}
 

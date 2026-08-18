@@ -156,12 +156,21 @@ export default function FluxoTrabalho() {
     return phases.filter(p => p.grupo_fase === 'fase_3').sort((a, b) => a.ordem - b.ordem);
   }, [phases]);
 
-  // Clientes filtrados
+  // States do Modal de Detalhes (Datas e Múltiplos Responsáveis)
+  const [detailModalStartDate, setDetailModalStartDate] = useState<string>('');
+  const [detailModalEndDate, setDetailModalEndDate] = useState<string>('');
+  const [detailModalStartAsIs, setDetailModalStartAsIs] = useState<string>('');
+  const [detailModalStartToBe, setDetailModalStartToBe] = useState<string>('');
+  const [detailModalSelectedMemberIds, setDetailModalSelectedMemberIds] = useState<string[]>([]);
+
+  // Clientes filtrados (Item 2: Pesquisa por Grupo Econômico)
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
-        c.razao_social.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.cnpj.includes(searchTerm);
+        c.razao_social.toLowerCase().includes(searchLower) ||
+        c.cnpj.includes(searchTerm) ||
+        (c.nome_grupo && c.nome_grupo.toLowerCase().includes(searchLower));
       const matchesSegment = 
         selectedSegment === 'todos' || c.segmento === selectedSegment;
       return matchesSearch && matchesSegment;
@@ -397,6 +406,15 @@ export default function FluxoTrabalho() {
     setDetailModalNotes(notes);
     setDetailModalPrincipalId(principalId);
     setDetailModalBackupId(backupId);
+
+    // Carregar datas e múltiplos responsáveis
+    const stepDates = pipe?.datas_etapas?.[stepKey];
+    setDetailModalStartDate(stepDates?.data_inicio || '');
+    setDetailModalEndDate(stepDates?.data_fim || '');
+    setDetailModalStartAsIs(pipe?.start_as_is || '');
+    setDetailModalStartToBe(pipe?.start_to_be || '');
+    setDetailModalSelectedMemberIds(pipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
+
     setDetailModalOpen(true);
   };
 
@@ -432,6 +450,11 @@ export default function FluxoTrabalho() {
     setDetailModalNotes(notes);
     setDetailModalPrincipalId(principalId);
     setDetailModalBackupId(backupId);
+
+    const stepDates = detailModalPipe?.datas_etapas?.[stepKey];
+    setDetailModalStartDate(stepDates?.data_inicio || '');
+    setDetailModalEndDate(stepDates?.data_fim || '');
+    setDetailModalSelectedMemberIds(detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
   };
 
   const handleSaveDetail = async () => {
@@ -459,6 +482,17 @@ export default function FluxoTrabalho() {
                 principal_id: detailModalPrincipalId || null,
                 backup_id: detailModalBackupId || null
               }
+            },
+            datas_etapas: {
+              [stepKey]: {
+                data_inicio: detailModalStartDate || null,
+                data_fim: detailModalEndDate || null
+              }
+            },
+            start_as_is: detailModalStartAsIs || null,
+            start_to_be: detailModalStartToBe || null,
+            responsaveis_multiplos_etapas: {
+              [stepKey]: detailModalSelectedMemberIds
             }
           })
           .select()
@@ -482,12 +516,31 @@ export default function FluxoTrabalho() {
           }
         };
 
+        const currentDatas = targetPipe.datas_etapas || {};
+        const updatedDatas = {
+          ...currentDatas,
+          [stepKey]: {
+            data_inicio: detailModalStartDate || null,
+            data_fim: detailModalEndDate || null
+          }
+        };
+
+        const currentMultiples = targetPipe.responsaveis_multiplos_etapas || {};
+        const updatedMultiples = {
+          ...currentMultiples,
+          [stepKey]: detailModalSelectedMemberIds
+        };
+
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update({
             caminhos_rede_etapas: updatedPaths,
             observacoes_etapas: updatedNotes,
             responsaveis_etapas: updatedResps,
+            datas_etapas: updatedDatas,
+            start_as_is: detailModalStartAsIs || null,
+            start_to_be: detailModalStartToBe || null,
+            responsaveis_multiplos_etapas: updatedMultiples,
             caminho_rede: detailModalStepNum === 1 ? detailModalPath : (targetPipe.caminho_rede || detailModalPath),
             updated_at: new Date().toISOString()
           })
@@ -498,7 +551,7 @@ export default function FluxoTrabalho() {
 
       await logActivity({
         titulo: 'Detalhes da Etapa Atualizados',
-        descricao: `Caminho de rede e notas atualizados para ${detailModalClient.razao_social}`,
+        descricao: `Datas do cronograma e responsáveis atualizados para ${detailModalClient.razao_social}`,
         tipo_log: 'info',
         client_id: detailModalClient.id,
         usuario_nome: getUserName()
@@ -511,6 +564,97 @@ export default function FluxoTrabalho() {
       alert('Erro ao salvar detalhes: ' + message);
     } finally {
       setSavingDetail(false);
+    }
+  };
+
+  // Alternar Status Tricolor da Etapa (Verde / Amarelo / Vermelho)
+  const handleUpdateStepStatus = async (client: Client, stepNum: number, newStatus: 'verde' | 'amarelo' | 'vermelho' | 'pendente') => {
+    try {
+      let pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
+      const stepKey = String(stepNum);
+
+      if (!pipe) {
+        const { data: newPipe, error: insErr } = await supabase
+          .from('workflow_pipelines')
+          .insert({
+            client_id: client.id,
+            fase_grupo: 'fase_1',
+            status: 'em_andamento',
+            etapa_atual: stepNum,
+            status_etapas: { [stepKey]: newStatus }
+          })
+          .select()
+          .single();
+
+        if (insErr) throw insErr;
+      } else {
+        const currentStatusMap = pipe.status_etapas || {};
+        const updatedMap = { ...currentStatusMap, [stepKey]: newStatus };
+
+        const { error: upErr } = await supabase
+          .from('workflow_pipelines')
+          .update({
+            status_etapas: updatedMap,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', pipe.id);
+
+        if (upErr) throw upErr;
+      }
+
+      fetchData();
+    } catch (err: unknown) {
+      console.error('Erro ao atualizar status da etapa:', err);
+    }
+  };
+
+  // Salvar Período do Escopo (Item 3)
+  const handleSavePeriodoEscopo = async (client: Client, periodo: string) => {
+    try {
+      let pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
+      if (!pipe) {
+        const { error: insErr } = await supabase
+          .from('workflow_pipelines')
+          .insert({
+            client_id: client.id,
+            fase_grupo: 'fase_1',
+            status: 'iniciado',
+            etapa_atual: 1,
+            periodo_escopo: periodo
+          });
+        if (insErr) throw insErr;
+      } else {
+        const { error: upErr } = await supabase
+          .from('workflow_pipelines')
+          .update({ periodo_escopo: periodo, updated_at: new Date().toISOString() })
+          .eq('id', pipe.id);
+        if (upErr) throw upErr;
+      }
+      fetchData();
+    } catch (err: unknown) {
+      console.error('Erro ao salvar período do escopo:', err);
+    }
+  };
+
+  // Marcar Fase como Não Aplicável (Item 9)
+  const handleTogglePhaseDisabled = async (client: Client, grupo: 'fase_2' | 'fase_3', disabled: boolean) => {
+    try {
+      let pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
+      if (!pipe) return;
+
+      const currentDisabled = pipe.fases_desabilitadas || {};
+      const updatedDisabled = { ...currentDisabled, [grupo]: disabled };
+
+      const { error: upErr } = await supabase
+        .from('workflow_pipelines')
+        .update({ fases_desabilitadas: updatedDisabled, updated_at: new Date().toISOString() })
+        .eq('id', pipe.id);
+
+      if (upErr) throw upErr;
+
+      fetchData();
+    } catch (err: unknown) {
+      console.error('Erro ao alternar fase desabilitada:', err);
     }
   };
 
@@ -717,6 +861,9 @@ export default function FluxoTrabalho() {
               onAdvanceMonthly={handleAdvanceMonthlyFlow}
               onOpenDetail={openDetailModal}
               onOpenAnalytic={(c) => setAnalyticClient(c)}
+              onTogglePhaseDisabled={handleTogglePhaseDisabled}
+              onUpdateStepStatus={handleUpdateStepStatus}
+              onSavePeriodoEscopo={handleSavePeriodoEscopo}
             />
           ))}
         </div>
@@ -738,6 +885,11 @@ export default function FluxoTrabalho() {
           notes={detailModalNotes}
           principalId={detailModalPrincipalId}
           backupId={detailModalBackupId}
+          startDate={detailModalStartDate}
+          endDate={detailModalEndDate}
+          startAsIs={detailModalStartAsIs}
+          startToBe={detailModalStartToBe}
+          selectedMemberIds={detailModalSelectedMemberIds}
           saving={savingDetail}
           onClose={() => setDetailModalOpen(false)}
           onSwitchStep={handleSwitchDetailStep}
@@ -745,6 +897,11 @@ export default function FluxoTrabalho() {
           onNotesChange={setDetailModalNotes}
           onPrincipalChange={setDetailModalPrincipalId}
           onBackupChange={setDetailModalBackupId}
+          onStartDateChange={setDetailModalStartDate}
+          onEndDateChange={setDetailModalEndDate}
+          onStartAsIsChange={setDetailModalStartAsIs}
+          onStartToBeChange={setDetailModalStartToBe}
+          onSelectedMemberIdsChange={setDetailModalSelectedMemberIds}
           onSave={handleSaveDetail}
         />
       )}

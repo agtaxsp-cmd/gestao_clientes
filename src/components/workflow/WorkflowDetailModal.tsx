@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Folder, Save, User, UserCheck, FileText, Loader2 } from 'lucide-react';
+import { X, Folder, Save, User, UserCheck, FileText, Loader2, Calendar } from 'lucide-react';
 import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, FaseGrupoEnum } from '../../types';
 import { MESES } from './types';
 import { cn } from '../../lib/utils';
@@ -18,6 +18,11 @@ export interface WorkflowDetailModalProps {
   notes: string;
   principalId: string;
   backupId: string;
+  startDate?: string;
+  endDate?: string;
+  startAsIs?: string;
+  startToBe?: string;
+  selectedMemberIds?: string[];
   saving: boolean;
   onClose: () => void;
   onSwitchStep: (stepNum: number) => void;
@@ -25,6 +30,11 @@ export interface WorkflowDetailModalProps {
   onNotesChange: (notes: string) => void;
   onPrincipalChange: (id: string) => void;
   onBackupChange: (id: string) => void;
+  onStartDateChange?: (date: string) => void;
+  onEndDateChange?: (date: string) => void;
+  onStartAsIsChange?: (date: string) => void;
+  onStartToBeChange?: (date: string) => void;
+  onSelectedMemberIdsChange?: (ids: string[]) => void;
   onSave: () => void;
 }
 
@@ -40,6 +50,11 @@ export default function WorkflowDetailModal({
   notes,
   principalId,
   backupId,
+  startDate = '',
+  endDate = '',
+  startAsIs = '',
+  startToBe = '',
+  selectedMemberIds = [],
   saving,
   onClose,
   onSwitchStep,
@@ -47,13 +62,27 @@ export default function WorkflowDetailModal({
   onNotesChange,
   onPrincipalChange,
   onBackupChange,
+  onStartDateChange,
+  onEndDateChange,
+  onStartAsIsChange,
+  onStartToBeChange,
+  onSelectedMemberIdsChange,
   onSave
 }: WorkflowDetailModalProps) {
   const monthObj = MESES.find(m => m.id === month);
 
+  const handleToggleMemberSelect = (id: string) => {
+    if (!onSelectedMemberIdsChange) return;
+    if (selectedMemberIds.includes(id)) {
+      onSelectedMemberIdsChange(selectedMemberIds.filter(mId => mId !== id));
+    } else {
+      onSelectedMemberIdsChange([...selectedMemberIds, id]);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-xl shadow-xl border border-slate-200 relative flex flex-col gap-5">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-xl shadow-xl border border-slate-200 relative flex flex-col gap-5 max-h-[90vh] overflow-y-auto scrollbar-thin">
         <button 
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -77,7 +106,7 @@ export default function WorkflowDetailModal({
             {client.razao_social}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure os responsáveis específicos, pastas de rede e observações para esta etapa.
+            Configure as datas do cronograma, múltiplos responsáveis, pastas de rede e observações.
           </p>
         </div>
 
@@ -131,12 +160,92 @@ export default function WorkflowDetailModal({
         )}
 
         <div className="flex flex-col gap-4">
-          {/* Responsáveis */}
+          {/* Seção 1: Datas da Etapa (Item 1 - Cronograma) */}
+          <div className="p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/20 rounded-xl border border-slate-200 flex flex-col gap-3">
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+              <Calendar className="w-4 h-4 text-indigo-600" />
+              Datas da Etapa (Cronograma)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Data Início</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => onStartDateChange && onStartDateChange(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Data Término</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => onEndDateChange && onEndDateChange(e.target.value)}
+                  className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {grupo === 'fase_1' && (
+              <div className="pt-2 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-indigo-900 block mb-1">Start AS-IS (Confirmação Outorga)</label>
+                  <input
+                    type="date"
+                    value={startAsIs}
+                    onChange={(e) => onStartAsIsChange && onStartAsIsChange(e.target.value)}
+                    className="w-full h-9 px-2.5 bg-white border border-indigo-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-purple-900 block mb-1">Start TO-BE (Após Pres. AS-IS)</label>
+                  <input
+                    type="date"
+                    value={startToBe}
+                    onChange={(e) => onStartToBeChange && onStartToBeChange(e.target.value)}
+                    className="w-full h-9 px-2.5 bg-white border border-purple-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-purple-100 outline-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Seção 2: Múltiplos Responsáveis (Item 4) */}
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-2">
+            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-indigo-600" />
+              Múltiplos Responsáveis Indicados (Item 4)
+            </label>
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-white rounded-lg border border-slate-200">
+              {members.map((m) => {
+                const isChecked = selectedMemberIds.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleToggleMemberSelect(m.id)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer border",
+                      isChecked
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-semibold"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    )}
+                  >
+                    <span>{m.nome}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Responsáveis Padrão Principal / Backup */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
             <div>
               <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
                 <User className="w-3.5 h-3.5 text-indigo-600" />
-                Responsável Principal
+                Responsável Principal (Padrão)
               </label>
               <select
                 value={principalId}
