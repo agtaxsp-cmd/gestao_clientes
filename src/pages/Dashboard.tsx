@@ -76,7 +76,7 @@ export default function Dashboard() {
   });
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [projectsTimeline, setProjectsTimeline] = useState<{ id: string; nomeGrupo: string; razaoSocial: string; raizCnpj: string; qtdFiliais: number; inicio?: string; fim?: string; status: string }[]>([]);
+  const [projectsTimeline, setProjectsTimeline] = useState<{ id: string; nomeGrupo: string; razaoSocial: string; raizCnpj: string; qtdFiliais: number; inicio?: string; fim?: string; status: string; greenSteps?: number; maxSteps?: number; pctProgress?: number }[]>([]);
   const [timelineSearch, setTimelineSearch] = useState<string>('');
 
   const [segmentStats, setSegmentStats] = useState<{ industria: number; comercio: number; servico: number }>({
@@ -179,12 +179,24 @@ export default function Dashboard() {
         inicio?: string;
         fim?: string;
         status: string;
+        greenStepsTotal: number;
+        maxStepsTotal: number;
       }> = {};
+
+      const totalFase1Steps = (phasesData || []).filter((p: WorkflowPhase) => p.grupo_fase === 'fase_1').length || 7;
 
       (clientsData || []).forEach(c => {
         const clean = (c.cnpj || '').replace(/\D/g, '');
         const raiz = clean.slice(0, 8) || c.id;
         const pipe1 = pipelinesData?.find(p => p.client_id === c.id && p.fase_grupo === 'fase_1');
+
+        // Calcular etapas em verde ou etapa atual
+        const statusMap = pipe1?.status_etapas || {};
+        let greenSteps = Object.values(statusMap).filter(s => s === 'verde').length;
+        if (greenSteps === 0 && pipe1) {
+          if (pipe1.status === 'concluido') greenSteps = totalFase1Steps;
+          else if (pipe1.etapa_atual > 1) greenSteps = Math.min(totalFase1Steps, pipe1.etapa_atual - 1);
+        }
 
         if (!groupsMap[raiz]) {
           groupsMap[raiz] = {
@@ -194,10 +206,15 @@ export default function Dashboard() {
             qtdFiliais: 1,
             inicio: pipe1?.start_as_is || undefined,
             fim: pipe1?.start_to_be || undefined,
-            status: pipe1?.status || 'iniciado'
+            status: pipe1?.status || 'iniciado',
+            greenStepsTotal: greenSteps,
+            maxStepsTotal: totalFase1Steps
           };
         } else {
           groupsMap[raiz].qtdFiliais += 1;
+          groupsMap[raiz].greenStepsTotal += greenSteps;
+          groupsMap[raiz].maxStepsTotal += totalFase1Steps;
+
           if (c.nome_grupo && !groupsMap[raiz].nomeGrupo) {
             groupsMap[raiz].nomeGrupo = c.nome_grupo;
           }
@@ -210,16 +227,22 @@ export default function Dashboard() {
         }
       });
 
-      const timelineData = Object.values(groupsMap).map(g => ({
-        id: g.raizCnpj,
-        nomeGrupo: g.nomeGrupo || '-',
-        razaoSocial: g.razaoSocial,
-        raizCnpj: g.raizCnpj,
-        qtdFiliais: g.qtdFiliais,
-        inicio: g.inicio,
-        fim: g.fim,
-        status: g.status
-      }));
+      const timelineData = Object.values(groupsMap).map(g => {
+        const pct = g.maxStepsTotal > 0 ? Math.round((g.greenStepsTotal / g.maxStepsTotal) * 100) : 0;
+        return {
+          id: g.raizCnpj,
+          nomeGrupo: g.nomeGrupo || '-',
+          razaoSocial: g.razaoSocial,
+          raizCnpj: g.raizCnpj,
+          qtdFiliais: g.qtdFiliais,
+          inicio: g.inicio,
+          fim: g.fim,
+          status: g.status,
+          greenSteps: g.greenStepsTotal,
+          maxSteps: g.maxStepsTotal,
+          pctProgress: pct
+        };
+      });
       setProjectsTimeline(timelineData);
 
       // 5. Logs de atividades recentes (Origem: Tabela `activity_logs`)
@@ -866,9 +889,18 @@ export default function Dashboard() {
                   <td className="py-3 px-4 text-center font-mono text-indigo-700 font-semibold">{item.raizCnpj}</td>
                   <td className="py-3 px-4 text-center font-mono text-slate-600">{item.inicio ? item.inicio.split('-').reverse().join('/') : '--/--'}</td>
                   <td className="py-3 px-4 text-center font-mono text-slate-600">{item.fim ? item.fim.split('-').reverse().join('/') : '--/--'}</td>
-                  <td className="py-3 px-4">
-                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
-                      <div className="bg-purple-600 h-full rounded-full w-2/3 transition-all"></div>
+                  <td className="py-3 px-4 min-w-[160px]">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
+                        <span>{item.greenSteps}/{item.maxSteps} Etapas</span>
+                        <span className="text-purple-700 font-bold">{item.pctProgress}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                        <div 
+                          className="bg-purple-600 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${item.pctProgress || 0}%` }}
+                        ></div>
+                      </div>
                     </div>
                   </td>
                   <td className="py-3 px-4 text-center font-semibold text-slate-700 capitalize">

@@ -376,6 +376,7 @@ export default function Clientes() {
                       <th className="px-6 py-4">Razão Social / Grupo</th>
                       <th className="px-6 py-4 whitespace-nowrap min-w-[200px]">CNPJ / CNAE</th>
                       <th className="px-6 py-4 whitespace-nowrap">Segmento</th>
+                      <th className="px-6 py-4">Observação</th>
                       <th className="px-6 py-4 text-right whitespace-nowrap">Ações</th>
                     </tr>
                   </thead>
@@ -401,6 +402,11 @@ export default function Clientes() {
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full ${segConfig.bg} ${segConfig.text} text-xs font-medium gap-1.5`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${segConfig.dot}`}></span>
                               {segConfig.label}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 max-w-[220px]">
+                            <span className="text-xs text-slate-600 line-clamp-2" title={client.observacao || ''}>
+                              {client.observacao || '-'}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right whitespace-nowrap">
