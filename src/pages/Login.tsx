@@ -3,16 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { logActivity } from '../lib/logger';
-import { Mail, Lock, User, Eye, EyeOff, LogIn, UserPlus, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,100 +29,36 @@ export default function Login() {
     setLoading(true);
 
     try {
-      if (mode === 'login') {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        const userName = data.user?.user_metadata?.full_name || email.split('@')[0];
-        logActivity({
-          titulo: 'Login Efetuado',
-          descricao: `Usuário ${userName} acessou o sistema com sucesso.`,
-          tipo_log: 'success',
-          usuario_nome: userName,
-        });
+      const userName = data.user?.user_metadata?.full_name || email.split('@')[0];
+      logActivity({
+        titulo: 'Login Efetuado',
+        descricao: `Usuário ${userName} acessou o sistema com sucesso.`,
+        tipo_log: 'success',
+        usuario_nome: userName,
+      });
 
-        setSuccessMessage('Login efetuado com sucesso! Redirecionando...');
-        setTimeout(() => {
-          navigate('/');
-        }, 1000);
+      setSuccessMessage('Login efetuado com sucesso! Redirecionando...');
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
 
-      } else {
-        // Criar Conta
-        if (!fullName.trim()) {
-          throw new Error('Por favor, informe seu nome completo.');
-        }
-
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
-
-        if (error) throw error;
-
-        // Registrar também na tabela de equipe (team_members) para atribuição no workflow
-        try {
-          const initials = fullName
-            .split(' ')
-            .map((n) => n[0])
-            .join('')
-            .substring(0, 2)
-            .toUpperCase();
-
-          await supabase.from('team_members').insert([
-            {
-              nome: fullName,
-              cargo: 'Analista Fiscal',
-              iniciais: initials || 'US',
-              ui_color_bg: 'bg-indigo-100',
-              ui_color_text: 'text-indigo-700',
-            },
-          ]);
-        } catch (teamErr) {
-          console.warn('Aviso ao registrar responsável em team_members:', teamErr);
-        }
-
-        logActivity({
-          titulo: 'Novo Usuário Cadastrado',
-          descricao: `Novo usuário registrado: ${fullName} (${email}).`,
-          tipo_log: 'success',
-          usuario_nome: fullName,
-        });
-
-        setSuccessMessage('Cadastro realizado com sucesso! Você já está autenticado.');
-        setTimeout(() => {
-          navigate('/');
-        }, 1200);
-      }
     } catch (err: any) {
       console.error('Erro na autenticação:', err);
       let message = err?.message || 'Ocorreu um erro ao processar. Tente novamente.';
       if (message.includes('Invalid login credentials')) {
         message = 'E-mail ou senha incorretos. Verifique suas credenciais.';
-      } else if (message.includes('User already registered')) {
-        message = 'Este e-mail já está cadastrado. Tente fazer login.';
-      } else if (message.includes('Password should be at least')) {
-        message = 'A senha deve ter pelo menos 6 caracteres.';
       }
       setErrorMessage(message);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Login de Demonstração / Convidado
-  const handleGuestLogin = () => {
-    setEmail('admin@agtaxtech.com.br');
-    setPassword('12345678');
-    setMode('login');
   };
 
   return (
@@ -142,48 +76,7 @@ export default function Login() {
             className="h-16 w-auto object-contain mb-3"
           />
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Painel de Controle e Gestão</h1>
-          <p className="text-xs text-slate-500 mt-1">Acesse sua conta para gerenciar clientes, checklists e fluxos</p>
-        </div>
-
-        {/* Abas Alternadoras (Login / Cadastro) */}
-        <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 border border-slate-200/60">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setErrorMessage(null);
-              setSuccessMessage(null);
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              mode === 'login'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-1.5">
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Entrar</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setErrorMessage(null);
-              setSuccessMessage(null);
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              mode === 'register'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-1.5">
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Criar Conta</span>
-            </div>
-          </button>
+          <p className="text-xs text-slate-500 mt-1">Acesse sua conta corporativa para gerenciar clientes, checklists e fluxos</p>
         </div>
 
         {/* Mensagem de Erro */}
@@ -204,23 +97,6 @@ export default function Login() {
 
         {/* Formulário Supabase Auth */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === 'register' && (
-            <div>
-              <label className="text-xs font-medium text-slate-700 block mb-1">Nome Completo</label>
-              <div className="relative flex items-center">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Ex: Gabriel Rocha"
-                  className="w-full h-11 pl-9 pr-3 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
-                />
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="text-xs font-medium text-slate-700 block mb-1">Endereço de E-mail</label>
             <div className="relative flex items-center">
@@ -246,7 +122,7 @@ export default function Login() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Informe sua senha"
                 className="w-full h-11 pl-9 pr-10 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
               />
               <button
@@ -272,24 +148,21 @@ export default function Login() {
               </>
             ) : (
               <>
-                <span>{mode === 'login' ? 'Entrar no Sistema' : 'Cadastrar Conta'}</span>
+                <span>Entrar no Sistema</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        {/* Botão de Preenchimento Rápido para Teste */}
+        {/* Informação de Acesso */}
         <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold transition-colors cursor-pointer"
-          >
-            Preencher dados de teste rápido (Demo)
-          </button>
+          <p className="text-[11px] text-slate-400">
+            Novos acessos são concedidos exclusivamente via convite do Administrador.
+          </p>
         </div>
       </div>
     </div>
   );
 }
+

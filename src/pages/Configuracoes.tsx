@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2 } from 'lucide-react';
+import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2, UserPlus, Send, Mail, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -61,6 +61,16 @@ export default function Configuracoes() {
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
 
+  // Form para convite de usuário
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteNome, setInviteNome] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteCargo, setInviteCargo] = useState('');
+  const [inviteIniciais, setInviteIniciais] = useState('');
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteSuccessMsg, setInviteSuccessMsg] = useState<string | null>(null);
+  const [inviteErrorMsg, setInviteErrorMsg] = useState<string | null>(null);
+
   // Form para membros
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [nome, setNome] = useState('');
@@ -74,6 +84,87 @@ export default function Configuracoes() {
   // Edição inline de nome da fase
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [tempPhaseName, setTempPhaseName] = useState('');
+
+  const handleOpenInviteModal = () => {
+    setInviteNome('');
+    setInviteEmail('');
+    setInviteCargo('');
+    setInviteIniciais('');
+    setInviteSuccessMsg(null);
+    setInviteErrorMsg(null);
+    setShowInviteModal(true);
+  };
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteSuccessMsg(null);
+    setInviteErrorMsg(null);
+
+    if (!inviteNome.trim() || !inviteEmail.trim()) {
+      setInviteErrorMsg('Por favor, preencha o nome completo e o e-mail do usuário.');
+      return;
+    }
+
+    try {
+      setSendingInvite(true);
+      
+      const computedInitials = (inviteIniciais.trim() || inviteNome.trim().split(' ').map(n => n[0]).join('').substring(0, 2)).toUpperCase();
+
+      // 1. Cadastrar como membro da equipe
+      const { error: teamErr } = await supabase.from('team_members').insert([
+        {
+          nome: inviteNome.trim(),
+          cargo: inviteCargo.trim() || 'Analista Fiscal',
+          iniciais: computedInitials || 'US',
+          ui_color_bg: 'bg-indigo-100',
+          ui_color_text: 'text-indigo-700',
+        },
+      ]);
+
+      if (teamErr) throw teamErr;
+
+      // 2. Registra convite/criação de conta de usuário via Supabase Auth
+      const tempPassword = `Agtax#${Math.random().toString(36).slice(-8)}${Math.floor(Math.random() * 100)}`;
+      const { error: authErr } = await supabase.auth.signUp({
+        email: inviteEmail.trim(),
+        password: tempPassword,
+        options: {
+          data: {
+            full_name: inviteNome.trim(),
+            invited_by: getUserName(),
+          },
+        },
+      });
+
+      if (authErr && !authErr.message.includes('User already registered')) {
+        console.warn('Nota ao cadastrar usuário no Supabase Auth:', authErr);
+      }
+
+      // 3. Log de Atividade
+      await logActivity({
+        titulo: 'Convite Enviado',
+        descricao: `Convite enviado para ${inviteNome.trim()} (${inviteEmail.trim()}) - Cargo: ${inviteCargo.trim() || 'Analista Fiscal'}.`,
+        tipo_log: 'success',
+        usuario_nome: getUserName(),
+      });
+
+      setInviteSuccessMsg(`Convite registrado e enviado para ${inviteEmail.trim()} com sucesso!`);
+      fetchData();
+
+      setTimeout(() => {
+        setShowInviteModal(false);
+        setInviteSuccessMsg(null);
+      }, 1800);
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Erro ao enviar convite:', message);
+      setInviteErrorMsg('Erro ao enviar convite: ' + message);
+    } finally {
+      setSendingInvite(false);
+    }
+  };
+
 
   const fetchData = async () => {
     try {
@@ -456,19 +547,28 @@ export default function Configuracoes() {
           {/* Seção Membros da Equipe */}
           <div className="lg:col-span-4 flex flex-col gap-6">
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col border border-slate-200 sticky top-4">
-              <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
                 <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo-600" />
-                  Membros da Equipe ({members.length})
+                  Membros ({members.length})
                 </h2>
-                <button 
-                  onClick={handleOpenAddMember}
-                  className="flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                  title="Adicionar Membro"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Novo Membro
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleOpenInviteModal}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+                    title="Enviar Convite para Novo Colaborador"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Enviar Convite
+                  </button>
+                  <button 
+                    onClick={handleOpenAddMember}
+                    className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-200/70 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    title="Adicionar Manualmente"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 max-h-[580px]">
@@ -817,6 +917,127 @@ export default function Configuracoes() {
           </div>
         </div>
       )}
+
+      {/* Modal Enviar Convite de Usuário */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-200 relative">
+            <button 
+              onClick={() => setShowInviteModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Enviar Convite de Acesso</h3>
+                <p className="text-xs text-slate-500">Cadastre o colaborador e envie o convite para a plataforma</p>
+              </div>
+            </div>
+
+            {inviteErrorMsg && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{inviteErrorMsg}</span>
+              </div>
+            )}
+
+            {inviteSuccessMsg && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700 font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>{inviteSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSendInvite} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Nome Completo</label>
+                <input 
+                  type="text" 
+                  value={inviteNome}
+                  onChange={(e) => {
+                    setInviteNome(e.target.value);
+                    if (!inviteIniciais) {
+                      const computed = e.target.value.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                      setInviteIniciais(computed);
+                    }
+                  }}
+                  placeholder="Ex: Ana Souza" 
+                  required 
+                  className="w-full h-10 px-3 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">E-mail Corporativo</label>
+                <div className="relative flex items-center">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                  <input 
+                    type="email" 
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="ana.souza@empresa.com.br" 
+                    required 
+                    className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-slate-700 block mb-1">Cargo / Função</label>
+                  <input 
+                    type="text" 
+                    value={inviteCargo}
+                    onChange={(e) => setInviteCargo(e.target.value)}
+                    placeholder="Ex: Consultor Tributário" 
+                    required 
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">Iniciais</label>
+                  <input 
+                    type="text" 
+                    value={inviteIniciais}
+                    onChange={(e) => setInviteIniciais(e.target.value.toUpperCase())}
+                    placeholder="AS" 
+                    maxLength={3}
+                    required 
+                    className="w-full h-10 px-3 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all uppercase text-center font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-500 leading-relaxed">
+                ℹ️ O novo colaborador será cadastrado e atrelado imediatamente às opções de atribuição dos fluxos de trabalho.
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={sendingInvite}
+                className="mt-1 w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {sendingInvite ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Enviando Convite...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Enviar Convite</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
