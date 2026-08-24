@@ -1,4 +1,104 @@
-export type SegmentoEnum = 'industria' | 'comercio' | 'servico';
+export type RegimeEnum = 'regular' | 'especifico' | 'diferenciado';
+export type SegmentoEnum = string;
+
+export interface RegimeConfig {
+  key: RegimeEnum;
+  label: string;
+  shortLabel: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  dotColor: string;
+  barColor: string;
+  description: string;
+}
+
+export const REGIMES_CONFIG: Record<RegimeEnum, RegimeConfig> = {
+  regular: {
+    key: 'regular',
+    label: 'Regime Regular (Normal)',
+    shortLabel: 'Regime Regular',
+    badgeBg: 'bg-indigo-50',
+    badgeText: 'text-indigo-700',
+    badgeBorder: 'border-indigo-200',
+    dotColor: 'bg-indigo-500',
+    barColor: 'bg-indigo-500',
+    description: 'Regime cumulativo / não-cumulativo padrão (Indústria, Comércio e Serviços)'
+  },
+  especifico: {
+    key: 'especifico',
+    label: 'Regimes Específicos (Apurações e Bases Próprias)',
+    shortLabel: 'Regime Específico',
+    badgeBg: 'bg-purple-50',
+    badgeText: 'text-purple-700',
+    badgeBorder: 'border-purple-200',
+    dotColor: 'bg-purple-500',
+    barColor: 'bg-purple-500',
+    description: 'Apurações e bases de cálculo próprias'
+  },
+  diferenciado: {
+    key: 'diferenciado',
+    label: 'Regimes Diferenciados (Alíquotas Reduzidas ou Zero)',
+    shortLabel: 'Regime Diferenciado',
+    badgeBg: 'bg-emerald-50',
+    badgeText: 'text-emerald-700',
+    badgeBorder: 'border-emerald-200',
+    dotColor: 'bg-emerald-500',
+    barColor: 'bg-emerald-500',
+    description: 'Alíquotas reduzidas ou alíquota zero'
+  }
+};
+
+export const SEGMENTOS_POR_REGIME: { regime: RegimeEnum; label: string; segmentos: string[] }[] = [
+  {
+    regime: 'regular',
+    label: 'Regime Regular (Normal)',
+    segmentos: [
+      'Normal - Indústria Geral',
+      'Normal - Comércio Geral',
+      'Normal - Serviços em Geral'
+    ]
+  },
+  {
+    regime: 'especifico',
+    label: 'Regimes Específicos (Apurações e Bases de Cálculo Próprias)',
+    segmentos: [
+      'Especifico - Combustíveis e Lubrificantes',
+      'Especifico - Serviços Financeiros',
+      'Especifico - Seguros e Resseguros',
+      'Especifico - Previdência Complementar e Capitalização',
+      'Especifico - Planos de Assistência à Saúde',
+      'Especifico - Planos de Assistência Funerária',
+      'Especifico - Operações Imobiliárias e Incorporação',
+      'Especifico - Sociedades Cooperativas',
+      'Especifico - Concursos de Prognósticos (Loterias e Apostas)',
+      'Especifico - Hotelaria e Parques Temáticos',
+      'Especifico - Transporte Coletivo de Passageiros',
+      'Especifico - Agências de Turismo'
+    ]
+  },
+  {
+    regime: 'diferenciado',
+    label: 'Regimes Diferenciados (Alíquotas Reduzidas ou Alíquota Zero)',
+    segmentos: [
+      'Diferenciado - Serviços de Saúde (Hospitais e Clínicas)',
+      'Diferenciado - Serviços de Educação',
+      'Diferenciado - Bares e Restaurantes',
+      'Diferenciado - Profissionais Liberais (Sociedades Intelectuais)',
+      'Diferenciado - Produtor Rural (Pessoa Física ou Jurídica)',
+      'Diferenciado - Insumos Agropecuários e Aquícolas',
+      'Diferenciado - Dispositivos Médicos e de Acessibilidade',
+      'Diferenciado - Medicamentos e Produtos de Saúde Menstrual'
+    ]
+  }
+];
+
+export function getRegimeFromSegmento(segmento?: string | null): RegimeEnum {
+  if (!segmento) return 'regular';
+  if (segmento.startsWith('Especifico')) return 'especifico';
+  if (segmento.startsWith('Diferenciado')) return 'diferenciado';
+  return 'regular';
+}
 
 export interface Client {
   id: string;
@@ -6,7 +106,8 @@ export interface Client {
   nome_grupo?: string | null;
   razao_social: string;
   cnae_principal: string;
-  segmento: SegmentoEnum;
+  segmento: string;
+  regime: RegimeEnum;
   observacao?: string | null;
   ui_color?: string | null;
   created_at?: string;
@@ -93,6 +194,7 @@ export interface WorkflowPhase {
   nome: string;
   ordem: number;
   grupo_fase: FaseGrupoEnum;
+  regime?: RegimeEnum | 'geral';
   color?: string;
   created_at?: string;
 }

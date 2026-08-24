@@ -19,7 +19,11 @@ import {
   WorkflowAssignment, 
   WorkflowPhase, 
   TeamMember, 
-  FaseGrupoEnum 
+  FaseGrupoEnum,
+  REGIMES_CONFIG,
+  SEGMENTOS_POR_REGIME,
+  getRegimeFromSegmento,
+  RegimeEnum
 } from '../types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CompanyWorkflowCard from '../components/workflow/CompanyWorkflowCard';
@@ -42,6 +46,7 @@ export default function FluxoTrabalho() {
   // Filtros
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRegime, setSelectedRegime] = useState<string>('todos');
   const [selectedSegment, setSelectedSegment] = useState<string>('todos');
 
   // Modal Detalhes da Etapa / Mês
@@ -163,19 +168,23 @@ export default function FluxoTrabalho() {
   const [detailModalStartToBe, setDetailModalStartToBe] = useState<string>('');
   const [detailModalSelectedMemberIds, setDetailModalSelectedMemberIds] = useState<string[]>([]);
 
-  // Clientes filtrados (Item 2: Pesquisa por Grupo Econômico)
+  // Clientes filtrados por Busca, Regime e Segmento
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
         c.razao_social.toLowerCase().includes(searchLower) ||
         c.cnpj.includes(searchTerm) ||
-        (c.nome_grupo && c.nome_grupo.toLowerCase().includes(searchLower));
-      const matchesSegment = 
-        selectedSegment === 'todos' || c.segmento === selectedSegment;
-      return matchesSearch && matchesSegment;
+        (c.nome_grupo && c.nome_grupo.toLowerCase().includes(searchLower)) ||
+        c.segmento.toLowerCase().includes(searchLower);
+
+      const clientRegime = c.regime || getRegimeFromSegmento(c.segmento);
+      const matchesRegime = selectedRegime === 'todos' || clientRegime === selectedRegime;
+      const matchesSegment = selectedSegment === 'todos' || c.segmento === selectedSegment;
+
+      return matchesSearch && matchesRegime && matchesSegment;
     });
-  }, [clients, searchTerm, selectedSegment]);
+  }, [clients, searchTerm, selectedRegime, selectedSegment]);
 
   // ────────────────────────────────────────────────
   // Operações de Avanço e Retorno
@@ -813,23 +822,43 @@ export default function FluxoTrabalho() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por Razão Social ou CNPJ..."
+            placeholder="Buscar por Razão Social, CNPJ ou Segmento..."
             className="w-full h-9 pl-9 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <span className="text-xs font-medium text-slate-500">Segmento:</span>
-          <select
-            value={selectedSegment}
-            onChange={(e) => setSelectedSegment(e.target.value)}
-            className="h-9 px-3 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-          >
-            <option value="todos">Todos os Segmentos</option>
-            <option value="industria">Indústria</option>
-            <option value="comercio">Comércio</option>
-            <option value="servico">Serviço</option>
-          </select>
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-slate-500">Regime:</span>
+            <select
+              value={selectedRegime}
+              onChange={(e) => setSelectedRegime(e.target.value)}
+              className="h-9 px-3 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+            >
+              <option value="todos">Todos os Regimes</option>
+              <option value="regular">Regime Regular (Normal)</option>
+              <option value="especifico">Regimes Específicos</option>
+              <option value="diferenciado">Regimes Diferenciados</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-slate-500">Segmento:</span>
+            <select
+              value={selectedSegment}
+              onChange={(e) => setSelectedSegment(e.target.value)}
+              className="h-9 px-3 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer max-w-[220px]"
+            >
+              <option value="todos">Todos os Segmentos</option>
+              {SEGMENTOS_POR_REGIME.map(grupo => (
+                <optgroup key={grupo.regime} label={grupo.label}>
+                  {grupo.segmentos.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -845,27 +874,34 @@ export default function FluxoTrabalho() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {filteredClients.map((client) => (
-            <CompanyWorkflowCard
-              key={client.id}
-              client={client}
-              selectedYear={selectedYear}
-              pipelines={pipelines}
-              fasesDiagnostico={fasesDiagnostico}
-              fasesPlanoAcao={fasesPlanoAcao}
-              fasesGovernanca={fasesGovernanca}
-              members={members}
-              assignments={assignments}
-              onAdvanceFase1={handleAdvanceFase1}
-              onRegressFase1={handleRegressFase1}
-              onAdvanceMonthly={handleAdvanceMonthlyFlow}
-              onOpenDetail={openDetailModal}
-              onOpenAnalytic={(c) => setAnalyticClient(c)}
-              onTogglePhaseDisabled={handleTogglePhaseDisabled}
-              onUpdateStepStatus={handleUpdateStepStatus}
-              onSavePeriodoEscopo={handleSavePeriodoEscopo}
-            />
-          ))}
+          {filteredClients.map((client) => {
+            const clientRegime = client.regime || getRegimeFromSegmento(client.segmento);
+            const clientFasesDiag = fasesDiagnostico.filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime);
+            const clientFasesPlano = fasesPlanoAcao.filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime);
+            const clientFasesGov = fasesGovernanca.filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime);
+
+            return (
+              <CompanyWorkflowCard
+                key={client.id}
+                client={client}
+                selectedYear={selectedYear}
+                pipelines={pipelines}
+                fasesDiagnostico={clientFasesDiag}
+                fasesPlanoAcao={clientFasesPlano}
+                fasesGovernanca={clientFasesGov}
+                members={members}
+                assignments={assignments}
+                onAdvanceFase1={handleAdvanceFase1}
+                onRegressFase1={handleRegressFase1}
+                onAdvanceMonthly={handleAdvanceMonthlyFlow}
+                onOpenDetail={openDetailModal}
+                onOpenAnalytic={(c) => setAnalyticClient(c)}
+                onTogglePhaseDisabled={handleTogglePhaseDisabled}
+                onUpdateStepStatus={handleUpdateStepStatus}
+                onSavePeriodoEscopo={handleSavePeriodoEscopo}
+              />
+            );
+          })}
         </div>
       )}
 

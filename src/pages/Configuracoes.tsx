@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2, UserPlus, Send, Mail, AlertCircle } from 'lucide-react';
+import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2, UserPlus, Send, Mail, AlertCircle, Filter, Tag } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
-import { TeamMember, WorkflowAssignment, WorkflowPhase, FaseGrupoEnum } from '../types';
+import { TeamMember, WorkflowAssignment, WorkflowPhase, FaseGrupoEnum, REGIMES_CONFIG, RegimeEnum } from '../types';
 import { cn } from '../lib/utils';
 
 const DEFAULT_FASES: { key: string; name: string; grupo_fase: FaseGrupoEnum; ordem: number; color: string }[] = [
@@ -80,6 +80,8 @@ export default function Configuracoes() {
   // Form para nova fase
   const [novaFaseNome, setNovaFaseNome] = useState('');
   const [novaFaseGrupo, setNovaFaseGrupo] = useState<FaseGrupoEnum>('fase_1');
+  const [novaFaseRegime, setNovaFaseRegime] = useState<RegimeEnum | 'geral'>('geral');
+  const [selectedRegimeFilter, setSelectedRegimeFilter] = useState<RegimeEnum>('regular');
 
   // Edição inline de nome da fase
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
@@ -331,25 +333,34 @@ export default function Configuracoes() {
     try {
       const phasesInGroup = phases.filter(p => p.grupo_fase === novaFaseGrupo);
       const newOrdem = phasesInGroup.length + 1;
-      const newKey = `${novaFaseGrupo}_custom_${Date.now()}`;
+      const baseKey = `${novaFaseGrupo}_custom_${Date.now()}`;
+      const color = novaFaseGrupo === 'fase_1' ? 'bg-indigo-600' : novaFaseGrupo === 'fase_2' ? 'bg-blue-600' : 'bg-emerald-600';
 
-      const { error: insErr } = await supabase
-        .from('workflow_phases')
-        .insert({
-          key: newKey,
-          nome: novaFaseNome.trim().toUpperCase(),
-          grupo_fase: novaFaseGrupo,
-          ordem: newOrdem,
-          color: novaFaseGrupo === 'fase_1' ? 'bg-indigo-600' : novaFaseGrupo === 'fase_2' ? 'bg-blue-600' : 'bg-emerald-600'
-        });
+      const targetRegimes: RegimeEnum[] = novaFaseRegime === 'geral' 
+        ? ['regular', 'especifico', 'diferenciado'] 
+        : [novaFaseRegime as RegimeEnum];
 
-      if (insErr) throw insErr;
+      for (const reg of targetRegimes) {
+        const newKey = `${baseKey}_${reg}`;
+        const { error: insErr } = await supabase
+          .from('workflow_phases')
+          .insert({
+            key: newKey,
+            nome: novaFaseNome.trim().toUpperCase(),
+            grupo_fase: novaFaseGrupo,
+            ordem: newOrdem,
+            regime: reg,
+            color
+          });
 
-      await supabase
-        .from('workflow_assignments')
-        .insert({ fase_fluxo: newKey })
-        .select()
-        .single();
+        if (insErr) throw insErr;
+
+        await supabase
+          .from('workflow_assignments')
+          .insert({ fase_fluxo: newKey })
+          .select()
+          .single();
+      }
 
       await logActivity({
         titulo: 'Nova Fase Criada',
@@ -630,12 +641,59 @@ export default function Configuracoes() {
               </button>
             </div>
 
+            {/* Filtro de Regime Tributário para Fases */}
+            <div className="flex items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto">
+              <span className="text-xs font-bold text-slate-500 px-3 flex items-center gap-1.5 shrink-0">
+                <Filter className="w-3.5 h-3.5 text-indigo-600" />
+                Filtrar Regime:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedRegimeFilter('regular')}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+                  selectedRegimeFilter === 'regular'
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-indigo-700"
+                )}
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                Regime Regular
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRegimeFilter('especifico')}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+                  selectedRegimeFilter === 'especifico'
+                    ? "bg-purple-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-purple-700"
+                )}
+              >
+                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                Regimes Específicos
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRegimeFilter('diferenciado')}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+                  selectedRegimeFilter === 'diferenciado'
+                    ? "bg-emerald-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-emerald-700"
+                )}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Regimes Diferenciados
+              </button>
+            </div>
+
             {/* 3 Blocos Visuais */}
             {phaseGroups.map((grupoKey) => {
               const meta = GRUPO_LABELS[grupoKey];
               const IconComp = meta.icon;
               const groupPhases = phases
-                .filter(p => p.grupo_fase === grupoKey)
+                .filter(p => p.grupo_fase === grupoKey && p.regime === selectedRegimeFilter)
                 .sort((a, b) => a.ordem - b.ordem);
 
               return (
@@ -669,7 +727,7 @@ export default function Configuracoes() {
                       <thead>
                         <tr className="bg-slate-50/50 border-b border-slate-200">
                           <th className="p-3 text-[11px] font-semibold text-slate-500 w-16 text-center">Ordem</th>
-                          <th className="p-3 text-[11px] font-semibold text-slate-500 w-2/5">Nome da Etapa</th>
+                          <th className="p-3 text-[11px] font-semibold text-slate-500 w-2/5">Nome da Etapa & Scope</th>
                           <th className="p-3 text-[11px] font-semibold text-slate-500">Responsável Principal</th>
                           <th className="p-3 text-[11px] font-semibold text-slate-500">Responsável Backup</th>
                           <th className="p-3 text-[11px] font-semibold text-slate-500 w-12 text-center">Ações</th>
@@ -679,7 +737,7 @@ export default function Configuracoes() {
                         {groupPhases.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="p-6 text-center text-xs text-slate-400">
-                              Nenhuma etapa cadastrada neste bloco.
+                              Nenhuma etapa cadastrada neste bloco para o filtro selecionado.
                             </td>
                           </tr>
                         ) : (
@@ -746,7 +804,23 @@ export default function Configuracoes() {
                                     </div>
                                   ) : (
                                     <div className="flex items-center justify-between group/phase pr-2">
-                                      <span className="text-xs font-bold text-slate-800">{phase.nome}</span>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-bold text-slate-800">{phase.nome}</span>
+                                        {phase.regime && phase.regime !== 'geral' ? (
+                                          <span className={cn(
+                                            "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                            REGIMES_CONFIG[phase.regime]?.badgeBg,
+                                            REGIMES_CONFIG[phase.regime]?.badgeText,
+                                            REGIMES_CONFIG[phase.regime]?.badgeBorder
+                                          )}>
+                                            {REGIMES_CONFIG[phase.regime]?.shortLabel}
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                            Geral
+                                          </span>
+                                        )}
+                                      </div>
                                       <button
                                         onClick={() => {
                                           setEditingPhaseId(phase.id);
@@ -893,6 +967,20 @@ export default function Configuracoes() {
                   <option value="fase_1">Fase 1 — Diagnóstico</option>
                   <option value="fase_2">Fase 2 — Plano de Ação</option>
                   <option value="fase_3">Fase 3 — Governança</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-600">Regime Tributário Alvo</label>
+                <select 
+                  value={novaFaseRegime}
+                  onChange={(e) => setNovaFaseRegime(e.target.value as RegimeEnum | 'geral')}
+                  className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm mt-1 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none bg-white font-medium"
+                >
+                  <option value="geral">Geral (Aplicável a Todos os Regimes)</option>
+                  <option value="regular">Regime Regular (Normal)</option>
+                  <option value="especifico">Regimes Específicos (Apurações e Bases Próprias)</option>
+                  <option value="diferenciado">Regimes Diferenciados (Alíquotas Reduzidas ou Zero)</option>
                 </select>
               </div>
 

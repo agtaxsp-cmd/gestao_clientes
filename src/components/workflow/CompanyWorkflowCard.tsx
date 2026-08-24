@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Compass, FileCheck, ShieldCheck, Eye, Calendar, Ban } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum } from '../../types';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum, REGIMES_CONFIG, getRegimeFromSegmento, RegimeEnum } from '../../types';
 import Phase1Stepper from './Phase1Stepper';
 import MonthRoulette from './MonthRoulette';
 import CompanyScheduleTab from './CompanyScheduleTab';
@@ -65,6 +65,7 @@ export default function CompanyWorkflowCard({
 
   // Fases Desabilitadas (Não Aplicáveis)
   const fasesDesabilitadas = pipeFase1?.fases_desabilitadas || {};
+  const isFase1Disabled = !!fasesDesabilitadas['fase_1'];
   const isFase2Disabled = !!fasesDesabilitadas['fase_2'];
   const isFase3Disabled = !!fasesDesabilitadas['fase_3'];
 
@@ -107,7 +108,16 @@ export default function CompanyWorkflowCard({
                   Grupo: {client.nome_grupo}
                 </span>
               )}
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+              {(() => {
+                const regimeKey = (client.regime || getRegimeFromSegmento(client.segmento)) as RegimeEnum;
+                const regConf = REGIMES_CONFIG[regimeKey] || REGIMES_CONFIG.regular;
+                return (
+                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold border", regConf.badgeBg, regConf.badgeText, regConf.badgeBorder)}>
+                    {regConf.shortLabel}
+                  </span>
+                );
+              })()}
+              <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200" title={client.segmento}>
                 {client.segmento}
               </span>
             </div>
@@ -165,6 +175,7 @@ export default function CompanyWorkflowCard({
           onClick={() => setActiveTab('fase_1')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
+            isFase1Disabled && "opacity-60 line-through",
             activeTab === 'fase_1'
               ? "border-indigo-600 text-indigo-700 bg-white rounded-t-lg shadow-2xs"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -172,12 +183,16 @@ export default function CompanyWorkflowCard({
         >
           <Compass className="w-4 h-4 text-indigo-600" />
           <span>FASE 1 — DIAGNÓSTICO</span>
-          <span className={cn(
-            "px-2 py-0.5 rounded-full text-[10px] font-bold",
-            isFase1Concluido ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"
-          )}>
-            {isFase1Concluido ? 'Concluído' : `${greenCount}/7`}
-          </span>
+          {isFase1Disabled ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">N/A</span>
+          ) : (
+            <span className={cn(
+              "px-2 py-0.5 rounded-full text-[10px] font-bold",
+              isFase1Concluido ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"
+            )}>
+              {isFase1Concluido ? 'Concluído' : `${greenCount}/${fasesDiagnostico.length || 7}`}
+            </span>
+          )}
         </button>
 
         <button
@@ -244,18 +259,24 @@ export default function CompanyWorkflowCard({
       <div className="p-5">
         {/* FASE 1: DIAGNÓSTICO */}
         {activeTab === 'fase_1' && (
-          <Phase1Stepper
-            client={client}
-            pipeFase1={pipeFase1}
-            fasesDiagnostico={fasesDiagnostico}
-            members={members}
-            assignments={assignments}
-            onAdvance={onAdvanceFase1}
-            onRegress={onRegressFase1}
-            onOpenDetail={(c, g, s) => onOpenDetail(c, g, s, null)}
-            onUpdateStepStatus={onUpdateStepStatus ? (stepNum, st) => onUpdateStepStatus(client, stepNum, st) : undefined}
-            onSavePeriodoEscopo={onSavePeriodoEscopo ? (p) => onSavePeriodoEscopo(client, p) : undefined}
-          />
+          isFase1Disabled ? (
+            <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs">
+              Esta fase (Fase 1 — Diagnóstico) foi marcada como <strong>Não Aplicável (Não Contratada)</strong> para este cliente.
+            </div>
+          ) : (
+            <Phase1Stepper
+              client={client}
+              pipeFase1={pipeFase1}
+              fasesDiagnostico={fasesDiagnostico}
+              members={members}
+              assignments={assignments}
+              onAdvance={onAdvanceFase1}
+              onRegress={onRegressFase1}
+              onOpenDetail={(c, g, s) => onOpenDetail(c, g, s, null)}
+              onUpdateStepStatus={onUpdateStepStatus ? (stepNum, st) => onUpdateStepStatus(client, stepNum, st) : undefined}
+              onSavePeriodoEscopo={onSavePeriodoEscopo ? (p) => onSavePeriodoEscopo(client, p) : undefined}
+            />
+          )
         )}
 
         {/* FASE 2: PLANO DE AÇÃO */}

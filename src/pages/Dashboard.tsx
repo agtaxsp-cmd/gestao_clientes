@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ActivityLog, WorkflowPhase, WorkflowAssignment, TeamMember } from '../types';
+import { ActivityLog, WorkflowPhase, WorkflowAssignment, TeamMember, getRegimeFromSegmento } from '../types';
 
 interface TeamMemberWorkload {
   id: string;
@@ -91,10 +91,10 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // 1. Total Clientes, Raiz CNPJ (Item 10) e Segmentos (Origem: Tabela `clients`)
+      // 1. Total Clientes, Raiz CNPJ (Item 10) e Regimes (Origem: Tabela `clients`)
       const { data: clientsData, error: errC } = await supabase
         .from('clients')
-        .select('id, cnpj, razao_social, nome_grupo, segmento');
+        .select('id, cnpj, razao_social, nome_grupo, segmento, regime');
       if (errC) throw errC;
 
       const totalClientsCount = clientsData?.length || 0;
@@ -106,14 +106,14 @@ export default function Dashboard() {
       }));
       const totalRaizCount = raizesUnicas.size;
 
-      const indCount = clientsData?.filter(c => c.segmento === 'industria').length || 0;
-      const comCount = clientsData?.filter(c => c.segmento === 'comercio').length || 0;
-      const serCount = clientsData?.filter(c => c.segmento === 'servico').length || 0;
+      const regCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'regular').length || 0;
+      const espCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'especifico').length || 0;
+      const difCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'diferenciado').length || 0;
 
       setSegmentStats({
-        industria: indCount,
-        comercio: comCount,
-        servico: serCount
+        industria: regCount,
+        comercio: espCount,
+        servico: difCount
       });
 
       // 2. Matriz de Documentos Fiscais (Origem: Tabela `fiscal_documents_matrix`)
@@ -661,24 +661,24 @@ export default function Dashboard() {
       {/* ──────── Main Content Grid (Segmentos, Responsáveis, Atividade Recente) ──────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Clientes por Segmento Card */}
+          {/* Clientes por Regime Tributário Card */}
           <div className="bg-white rounded-2xl shadow-2xs p-5 flex flex-col border border-slate-200 justify-between h-[290px]">
             <div className="flex flex-col mb-2">
-              <h3 className="text-base font-bold text-slate-900">Clientes por Segmento</h3>
-              <p className="text-xs text-slate-500 font-mono mt-0.5">Origem: <strong className="text-slate-700">clients.segmento</strong></p>
+              <h3 className="text-base font-bold text-slate-900">Clientes por Regime Tributário</h3>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">Origem: <strong className="text-slate-700">clients.regime</strong></p>
             </div>
             <div className="flex-1 flex flex-col justify-around gap-2.5">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-medium text-slate-700">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-                    Indústria
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                    Regime Regular (Normal)
                   </span>
                   <span className="font-semibold text-slate-900">{segmentStats.industria}</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div 
-                    className="bg-blue-600 h-full transition-all duration-500" 
+                    className="bg-indigo-600 h-full transition-all duration-500" 
                     style={{ width: `${stats.totalClients ? (segmentStats.industria / stats.totalClients) * 100 : 0}%` }}
                   ></div>
                 </div>
@@ -687,14 +687,14 @@ export default function Dashboard() {
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-medium text-slate-700">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-                    Comércio
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                    Regimes Específicos
                   </span>
                   <span className="font-semibold text-slate-900">{segmentStats.comercio}</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div 
-                    className="bg-emerald-600 h-full transition-all duration-500" 
+                    className="bg-purple-600 h-full transition-all duration-500" 
                     style={{ width: `${stats.totalClients ? (segmentStats.comercio / stats.totalClients) * 100 : 0}%` }}
                   ></div>
                 </div>
@@ -703,14 +703,14 @@ export default function Dashboard() {
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-medium text-slate-700">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
-                    Serviços
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                    Regimes Diferenciados
                   </span>
                   <span className="font-semibold text-slate-900">{segmentStats.servico}</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div 
-                    className="bg-purple-600 h-full transition-all duration-500" 
+                    className="bg-emerald-600 h-full transition-all duration-500" 
                     style={{ width: `${stats.totalClients ? (segmentStats.servico / stats.totalClients) * 100 : 0}%` }}
                   ></div>
                 </div>
