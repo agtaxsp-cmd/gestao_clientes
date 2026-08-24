@@ -360,6 +360,12 @@ export default function FluxoTrabalho() {
     }
   };
 
+  const getClientPhasesForGroup = (client: Client, grupo: FaseGrupoEnum) => {
+    const cRegime = client.regime || getRegimeFromSegmento(client.segmento);
+    const targetPhases = grupo === 'fase_1' ? fasesDiagnostico : grupo === 'fase_2' ? fasesPlanoAcao : fasesGovernanca;
+    return targetPhases.filter(p => !p.regime || p.regime === 'geral' || p.regime === cRegime);
+  };
+
   // ────────────────────────────────────────────────
   // Modal de Detalhes da Etapa / Mês
   // ────────────────────────────────────────────────
@@ -391,14 +397,8 @@ export default function FluxoTrabalho() {
     const path = pipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (pipe?.caminho_rede || '') : '');
     const notes = pipe?.observacoes_etapas?.[stepKey] || '';
 
-    let phaseKey = '';
-    if (grupo === 'fase_1') {
-      phaseKey = fasesDiagnostico[stepNum - 1]?.key || '';
-    } else if (grupo === 'fase_2') {
-      phaseKey = fasesPlanoAcao[stepNum - 1]?.key || '';
-    } else {
-      phaseKey = fasesGovernanca[stepNum - 1]?.key || '';
-    }
+    const clientPhases = getClientPhasesForGroup(client, grupo);
+    const phaseKey = clientPhases[stepNum - 1]?.key || '';
 
     const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
     const custom = pipe?.responsaveis_etapas?.[stepKey];
@@ -435,14 +435,8 @@ export default function FluxoTrabalho() {
     const path = detailModalPipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (detailModalPipe?.caminho_rede || '') : '');
     const notes = detailModalPipe?.observacoes_etapas?.[stepKey] || '';
 
-    let phaseKey = '';
-    if (detailModalGroup === 'fase_1') {
-      phaseKey = fasesDiagnostico[stepNum - 1]?.key || '';
-    } else if (detailModalGroup === 'fase_2') {
-      phaseKey = fasesPlanoAcao[stepNum - 1]?.key || '';
-    } else {
-      phaseKey = fasesGovernanca[stepNum - 1]?.key || '';
-    }
+    const clientPhases = getClientPhasesForGroup(detailModalClient, detailModalGroup);
+    const phaseKey = clientPhases[stepNum - 1]?.key || '';
 
     const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
     const custom = detailModalPipe?.responsaveis_etapas?.[stepKey];
@@ -913,9 +907,9 @@ export default function FluxoTrabalho() {
           stepNum={detailModalStepNum}
           month={detailModalMonth}
           pipe={detailModalPipe}
-          fasesDiagnostico={fasesDiagnostico}
-          fasesPlanoAcao={fasesPlanoAcao}
-          fasesGovernanca={fasesGovernanca}
+          fasesDiagnostico={getClientPhasesForGroup(detailModalClient, 'fase_1')}
+          fasesPlanoAcao={getClientPhasesForGroup(detailModalClient, 'fase_2')}
+          fasesGovernanca={getClientPhasesForGroup(detailModalClient, 'fase_3')}
           members={members}
           path={detailModalPath}
           notes={detailModalNotes}

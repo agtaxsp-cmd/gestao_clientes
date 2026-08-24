@@ -71,6 +71,11 @@ export default function WorkflowDetailModal({
   onSave
 }: WorkflowDetailModalProps) {
   const monthObj = MESES.find(m => m.id === month);
+  const currentPhase = grupo === 'fase_1' 
+    ? fasesDiagnostico[stepNum - 1] 
+    : grupo === 'fase_2' 
+    ? fasesPlanoAcao[stepNum - 1] 
+    : fasesGovernanca[stepNum - 1];
 
   const handleToggleMemberSelect = (id: string) => {
     if (!onSelectedMemberIdsChange) return;
@@ -92,22 +97,32 @@ export default function WorkflowDetailModal({
         </button>
 
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className={cn(
-              "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase",
-              grupo === 'fase_1' ? "bg-indigo-100 text-indigo-700" :
-              grupo === 'fase_2' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+              "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border shadow-2xs",
+              grupo === 'fase_1' ? "bg-indigo-100 text-indigo-700 border-indigo-200" :
+              grupo === 'fase_2' ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-emerald-100 text-emerald-700 border-emerald-200"
             )}>
               {grupo === 'fase_1' ? 'Fase 1 — Diagnóstico' :
                grupo === 'fase_2' ? `Fase 2 — Plano de Ação (${monthObj?.nome || ''})` :
                `Fase 3 — Governança (${monthObj?.nome || ''})`}
             </span>
+            {currentPhase && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-900 text-white shadow-2xs">
+                Etapa {stepNum}: {currentPhase.nome}
+              </span>
+            )}
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mt-1">
-            {client.razao_social}
+          <h3 className="text-lg font-bold text-slate-900 mt-1.5 flex items-center justify-between gap-2">
+            <span className="truncate">{client.razao_social}</span>
+            {currentPhase && (
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-100 shrink-0">
+                {currentPhase.nome}
+              </span>
+            )}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure as datas do cronograma, múltiplos responsáveis, pastas de rede e observações.
+            Configure datas do cronograma, múltiplos responsáveis, pasta de rede e observações para a etapa <strong className="text-slate-800">"{currentPhase?.nome || `Etapa ${stepNum}`}"</strong>.
           </p>
         </div>
 
