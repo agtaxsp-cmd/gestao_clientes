@@ -45,6 +45,7 @@ export default function WorkflowDetailModal({
   month,
   fasesDiagnostico,
   fasesPlanoAcao,
+  fasesGovernanca = [],
   members,
   path,
   notes,
@@ -149,6 +150,30 @@ export default function WorkflowDetailModal({
                     "px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border",
                     isSelected
                       ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  )}
+                >
+                  <span>{sNum}. {p.nome}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {grupo === 'fase_3' && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-slate-200 scrollbar-thin">
+            {fasesGovernanca.map((p, idx) => {
+              const sNum = idx + 1;
+              const isSelected = stepNum === sNum;
+              return (
+                <button
+                  key={p.id || p.key}
+                  type="button"
+                  onClick={() => onSwitchStep(sNum)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border",
+                    isSelected
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                   )}
                 >

@@ -185,26 +185,36 @@ export default function MonthRoulette({
               {/* Corpo de Etapas */}
               {grupo === 'fase_2' ? (
                 <div className="flex flex-col gap-1.5 text-[11px]">
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50/80 border border-slate-100">
-                    <span className="font-semibold text-slate-700">1. Elaborar</span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetail(client, grupo, 1, m.id)}
+                    className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
+                    title="Clique para gerenciar notas, arquivos e responsáveis da etapa 1"
+                  >
+                    <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900">1. Elaborar</span>
                     {isElaborarDone ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                     ) : step === 1 ? (
                       <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
                     ) : (
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                     )}
-                  </div>
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50/80 border border-slate-100">
-                    <span className="font-semibold text-slate-700">2. Acompanhamento</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetail(client, grupo, 2, m.id)}
+                    className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
+                    title="Clique para gerenciar notas, arquivos e responsáveis da etapa 2"
+                  >
+                    <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900">2. Acompanhamento</span>
                     {isAcompDone ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                     ) : step === 2 ? (
                       <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
                     ) : (
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                     )}
-                  </div>
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5 text-[11px]">
@@ -215,33 +225,44 @@ export default function MonthRoulette({
                       const isCurrent = step === stepIndex;
 
                       return (
-                        <div key={f.id || f.key || idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/80 border border-slate-100">
+                        <button
+                          key={f.id || f.key || idx}
+                          type="button"
+                          onClick={() => onOpenDetail(client, grupo, stepIndex, m.id)}
+                          className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
+                          title={`Clique para gerenciar notas, arquivos e responsáveis de "${f.nome}"`}
+                        >
                           <div className="flex items-center gap-2">
-                            <ShieldCheck className={cn("w-3.5 h-3.5", isDone ? "text-emerald-600" : isCurrent ? "text-blue-600 font-bold" : "text-slate-400")} />
-                            <span className="font-semibold text-slate-700">{stepIndex}. {f.nome}</span>
+                            <ShieldCheck className={cn("w-3.5 h-3.5", isDone ? "text-emerald-600" : isCurrent ? "text-blue-600 font-bold" : "text-slate-400 group-hover/step:text-indigo-600")} />
+                            <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900 truncate max-w-[160px]">{stepIndex}. {f.nome}</span>
                           </div>
                           {isDone ? (
                             <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                           ) : isCurrent ? (
                             <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
                           ) : (
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                           )}
-                        </div>
+                        </button>
                       );
                     })
                   ) : (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDetail(client, grupo, 1, m.id)}
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
+                      title="Clique para gerenciar notas, arquivos e responsáveis da etapa"
+                    >
                       <div className="flex items-center gap-2">
-                        <ShieldCheck className={cn("w-4 h-4", isConcluido ? "text-emerald-600" : "text-slate-400")} />
-                        <span className="font-semibold text-slate-700">Auditoria Fiscal</span>
+                        <ShieldCheck className={cn("w-4 h-4", isConcluido ? "text-emerald-600" : "text-slate-400 group-hover/step:text-indigo-600")} />
+                        <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900">Auditoria Fiscal</span>
                       </div>
                       {isConcluido ? (
                         <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                       ) : (
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                       )}
-                    </div>
+                    </button>
                   )}
                 </div>
               )}
