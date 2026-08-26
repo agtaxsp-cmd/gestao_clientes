@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, ClipboardCheck, GitMerge, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, FlaskConical, ClipboardCheck, GitMerge, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface SidebarProps {
@@ -10,9 +10,10 @@ interface SidebarProps {
 export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { name: 'Clientes', path: '/clientes', icon: Users },
+    { name: 'Cadastro Clientes', path: '/clientes', icon: Users },
     { name: 'Checklist', path: '/checklist', icon: ClipboardCheck },
-    { name: 'Fluxo de Trabalho', path: '/fluxo-de-trabalho', icon: GitMerge },
+    { name: 'POC', path: '/poc', icon: FlaskConical },
+    { name: 'Cliente Recorrente', path: '/fluxo-de-trabalho', icon: GitMerge },
     { name: 'Configurações', path: '/configuracoes', icon: Settings },
   ];
 

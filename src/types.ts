@@ -100,6 +100,9 @@ export function getRegimeFromSegmento(segmento?: string | null): RegimeEnum {
   return 'regular';
 }
 
+export type TipoContratoEnum = 'recorrente' | 'poc';
+export type StatusPocEnum = 'em_andamento' | 'convertido' | 'perdido';
+
 export interface Client {
   id: string;
   cnpj: string;
@@ -108,6 +111,9 @@ export interface Client {
   cnae_principal: string;
   segmento: string;
   regime: RegimeEnum;
+  tipo_contrato?: TipoContratoEnum;
+  status_poc?: StatusPocEnum | string;
+  data_limite_poc?: string | null;
   observacao?: string | null;
   ui_color?: string | null;
   created_at?: string;
@@ -137,8 +143,8 @@ export interface FiscalDocumentMatrix {
 export type PipelineStatusEnum = 'iniciado' | 'em_andamento' | 'concluido' | 'bloqueado';
 export type EtapaColorStatus = 'verde' | 'amarelo' | 'vermelho' | 'pendente';
 
-export type FaseGrupoEnum = 'fase_1' | 'fase_2' | 'fase_3';
-export type FaseTabEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'cronograma';
+export type FaseGrupoEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'fase_poc';
+export type FaseTabEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'fase_poc' | 'cronograma';
 
 export interface StepResponsibles {
   principal_id?: string | null;

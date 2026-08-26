@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, Lightbulb, Filter, Pencil, Hash, Trash2, Loader2, Tag, Compass, FileCheck, ShieldCheck } from 'lucide-react';
+import { Building2, Save, Lightbulb, Filter, Pencil, Hash, Trash2, Loader2, Tag, Compass, FileCheck, ShieldCheck, FlaskConical, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,9 +8,10 @@ import {
   REGIMES_CONFIG, 
   SEGMENTOS_POR_REGIME, 
   getRegimeFromSegmento, 
-  RegimeEnum 
+  RegimeEnum,
+  TipoContratoEnum
 } from '../types';
-import { formatCNPJ, formatCNAE, cleanDigits } from '../lib/utils';
+import { formatCNPJ, formatCNAE, cleanDigits, cn } from '../lib/utils';
 
 export default function Clientes() {
   const { getUserName } = useAuth();
@@ -19,9 +20,11 @@ export default function Clientes() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [contratoFilter, setContratoFilter] = useState<'todos' | TipoContratoEnum>('todos');
   
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [tipoContrato, setTipoContrato] = useState<TipoContratoEnum>('recorrente');
   const [cnpj, setCnpj] = useState('');
   const [nomeGrupo, setNomeGrupo] = useState('');
   const [razaoSocial, setRazaoSocial] = useState('');
@@ -98,6 +101,7 @@ export default function Clientes() {
             cnae_principal: formattedCnae,
             segmento: segmento.trim(),
             regime: computedRegime,
+            tipo_contrato: tipoContrato,
             observacao: observacao.trim() || null,
             updated_at: new Date().toISOString()
           })
@@ -148,6 +152,8 @@ export default function Clientes() {
             cnae_principal: formattedCnae,
             segmento: segmento.trim(),
             regime: computedRegime,
+            tipo_contrato: tipoContrato,
+            status_poc: tipoContrato === 'poc' ? 'em_andamento' : null,
             observacao: observacao.trim() || null
           })
           .select()
@@ -160,10 +166,10 @@ export default function Clientes() {
             .from('workflow_pipelines')
             .insert({
               client_id: inserted.id,
-              fase_grupo: 'fase_1',
+              fase_grupo: tipoContrato === 'poc' ? 'fase_poc' : 'fase_1',
               status: 'iniciado',
               etapa_atual: 1,
-              mensagem_info: 'Fase 1 - Diagnóstico iniciada automaticamente ao cadastrar cliente.',
+              mensagem_info: tipoContrato === 'poc' ? 'Esteira de POC iniciada.' : 'Fase 1 - Diagnóstico iniciada automaticamente ao cadastrar cliente.',
               mes_referencia: null,
               caminhos_rede_etapas: {},
               observacoes_etapas: {},
@@ -175,7 +181,7 @@ export default function Clientes() {
 
         await logActivity({
           titulo: 'Cliente Cadastrado',
-          descricao: `Novo cliente ${razaoSocial.trim()} (CNPJ: ${formattedCnpj}) cadastrado com esteira de fases configurada`,
+          descricao: `Novo cliente ${razaoSocial.trim()} (${tipoContrato === 'poc' ? 'POC' : 'Recorrente'}) cadastrado com sucesso`,
           tipo_log: 'success',
           client_id: inserted?.id,
           usuario_nome: getUserName()
@@ -195,6 +201,7 @@ export default function Clientes() {
 
   const handleEdit = async (client: Client) => {
     setEditingId(client.id);
+    setTipoContrato(client.tipo_contrato || 'recorrente');
     setCnpj(formatCNPJ(client.cnpj));
     setNomeGrupo(client.nome_grupo || '');
     setRazaoSocial(client.razao_social);
@@ -245,6 +252,7 @@ export default function Clientes() {
 
   const resetForm = () => {
     setEditingId(null);
+    setTipoContrato('recorrente');
     setCnpj('');
     setNomeGrupo('');
     setRazaoSocial('');
@@ -255,6 +263,9 @@ export default function Clientes() {
   };
 
   const filteredClients = clients.filter(c => {
+    const cTipo = c.tipo_contrato || 'recorrente';
+    if (contratoFilter !== 'todos' && cTipo !== contratoFilter) return false;
+
     const searchLower = search.toLowerCase();
     const regimeKey = c.regime || getRegimeFromSegmento(c.segmento);
     const regimeLabel = REGIMES_CONFIG[regimeKey as RegimeEnum]?.shortLabel || '';
@@ -298,6 +309,55 @@ export default function Clientes() {
         </div>
         
         <form onSubmit={handleSave} className="flex flex-col gap-5 relative z-10">
+          {/* Row 0: Tipo de Contrato / Destino do Cliente */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+              <span>Tipo de Contrato / Esteira Alvo *</span>
+              <span className="text-[11px] font-normal text-slate-500">Defina se o cliente é Recorrente (Contrato Fechado) ou Prova de Conceito (POC)</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTipoContrato('recorrente')}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer",
+                  tipoContrato === 'recorrente'
+                    ? "bg-indigo-600 text-white border-indigo-700 shadow-xs font-bold"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="w-4 h-4" />
+                  <div>
+                    <div className="text-xs font-bold">Cliente Recorrente</div>
+                    <div className={cn("text-[10px]", tipoContrato === 'recorrente' ? "text-indigo-100" : "text-slate-400")}>Contrato Fechado (Fluxo Contínuo)</div>
+                  </div>
+                </div>
+                {tipoContrato === 'recorrente' && <CheckCircle2 className="w-4 h-4 text-white" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoContrato('poc')}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer",
+                  tipoContrato === 'poc'
+                    ? "bg-amber-600 text-white border-amber-700 shadow-xs font-bold"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <FlaskConical className="w-4 h-4" />
+                  <div>
+                    <div className="text-xs font-bold">Prova de Conceito (POC)</div>
+                    <div className={cn("text-[10px]", tipoContrato === 'poc' ? "text-amber-100" : "text-slate-400")}>Pré-Vendas / Amostragem em Teste</div>
+                  </div>
+                </div>
+                {tipoContrato === 'poc' && <CheckCircle2 className="w-4 h-4 text-white" />}
+              </button>
+            </div>
+          </div>
+
           {/* Row 1: CNPJ, Nome do Grupo, CNAE */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex flex-col gap-1.5">
@@ -508,8 +568,42 @@ export default function Clientes() {
             <Building2 className="w-5 h-5 text-indigo-600" />
             <h2 className="text-lg font-bold text-slate-900">Lista de Clientes ({filteredClients.length})</h2>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-80">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+            {/* Pílulas de Filtro por Contrato */}
+            <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setContratoFilter('todos')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  contratoFilter === 'todos' ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                )}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setContratoFilter('recorrente')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                  contratoFilter === 'recorrente' ? "bg-indigo-600 text-white shadow-2xs" : "text-slate-600 hover:text-indigo-700"
+                )}
+              >
+                Recorrentes
+              </button>
+              <button
+                type="button"
+                onClick={() => setContratoFilter('poc')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                  contratoFilter === 'poc' ? "bg-amber-600 text-white shadow-2xs" : "text-slate-600 hover:text-amber-700"
+                )}
+              >
+                POCs 🧪
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-72">
               <input 
                 type="text" 
                 placeholder="Filtrar por nome, CNPJ, segmento ou regime..." 
@@ -538,8 +632,9 @@ export default function Clientes() {
                 <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
                   <th className="px-6 py-3.5">Razão Social / Grupo</th>
                   <th className="px-6 py-3.5 whitespace-nowrap min-w-[170px]">CNPJ / CNAE</th>
+                  <th className="px-6 py-3.5 whitespace-nowrap">Contrato / Esteira</th>
                   <th className="px-6 py-3.5 whitespace-nowrap">Regime Tributário</th>
-                  <th className="px-6 py-3.5 min-w-[200px]">Segmento</th>
+                  <th className="px-6 py-3.5 min-w-[180px]">Segmento</th>
                   <th className="px-6 py-3.5">Observação</th>
                   <th className="px-6 py-3.5 text-right whitespace-nowrap">Ações</th>
                 </tr>
@@ -548,6 +643,7 @@ export default function Clientes() {
                 {filteredClients.map((client) => {
                   const regimeKey = (client.regime || getRegimeFromSegmento(client.segmento)) as RegimeEnum;
                   const regimeConf = REGIMES_CONFIG[regimeKey] || REGIMES_CONFIG.regular;
+                  const isPoc = client.tipo_contrato === 'poc';
 
                   return (
                     <tr key={client.id} className="hover:bg-slate-50/80 transition-colors group relative border-b border-slate-100 last:border-0">
@@ -562,6 +658,19 @@ export default function Clientes() {
                         <div className="font-semibold text-slate-800 text-xs">{formatCNPJ(client.cnpj)}</div>
                         {client.cnae_principal && (
                           <div className="text-[11px] text-slate-400 font-normal mt-0.5">CNAE: {formatCNAE(client.cnae_principal)}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isPoc ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-bold gap-1 shadow-2xs">
+                            <FlaskConical className="w-3 h-3 text-amber-600" />
+                            POC (Em Teste)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-bold gap-1 shadow-2xs">
+                            <Building2 className="w-3 h-3 text-indigo-600" />
+                            Recorrente
+                          </span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

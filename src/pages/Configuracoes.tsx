@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2, UserPlus, Send, Mail, AlertCircle, Filter, Tag } from 'lucide-react';
+import { Save, Users, PlusCircle, Pencil, GitMerge, Trash2, Loader2, X, Plus, Check, ArrowUp, ArrowDown, ShieldCheck, FileCheck, Compass, CheckCircle2, UserPlus, Send, Mail, AlertCircle, Filter, Tag, FlaskConical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -46,6 +46,13 @@ const GRUPO_LABELS: Record<FaseGrupoEnum, { title: string; subtitle: string; ico
     icon: ShieldCheck,
     badge: 'Recorrente Mensal (1 Etapa)',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  },
+  fase_poc: {
+    title: 'Módulo POC — Provas de Conceito',
+    subtitle: 'Etapas de pré-venda, amostragem e validação técnica da POC',
+    icon: FlaskConical,
+    badge: 'Esteira de Testes (POC)',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-300'
   }
 };
 
@@ -688,12 +695,12 @@ export default function Configuracoes() {
               </button>
             </div>
 
-            {/* 3 Blocos Visuais */}
-            {phaseGroups.map((grupoKey) => {
+            {/* 4 Blocos Visuais */}
+            {(['fase_1', 'fase_2', 'fase_3', 'fase_poc'] as FaseGrupoEnum[]).map((grupoKey) => {
               const meta = GRUPO_LABELS[grupoKey];
               const IconComp = meta.icon;
               const groupPhases = phases
-                .filter(p => p.grupo_fase === grupoKey && p.regime === selectedRegimeFilter)
+                .filter(p => p.grupo_fase === grupoKey && (grupoKey === 'fase_poc' || p.regime === selectedRegimeFilter))
                 .sort((a, b) => a.ordem - b.ordem);
 
               return (
@@ -967,6 +974,7 @@ export default function Configuracoes() {
                   <option value="fase_1">Fase 1 — Diagnóstico</option>
                   <option value="fase_2">Fase 2 — Plano de Ação</option>
                   <option value="fase_3">Fase 3 — Governança</option>
+                  <option value="fase_poc">Módulo POC — Provas de Conceito</option>
                 </select>
               </div>
 

@@ -13,7 +13,9 @@ import {
   Database,
   ArrowUpRight,
   UserCheck,
-  Search
+  Search,
+  FlaskConical,
+  LayoutDashboard
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -72,7 +74,11 @@ export default function Dashboard() {
     fase3EmAndamentoAno: 0,
     matrixConforme: 0,
     matrixPendente: 0,
-    matrixCritico: 0
+    matrixCritico: 0,
+    totalPocs: 0,
+    pocsEmAndamento: 0,
+    pocsConvertidas: 0,
+    taxaConversaoPoc: 0
   });
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -94,11 +100,17 @@ export default function Dashboard() {
       // 1. Total Clientes, Raiz CNPJ (Item 10) e Regimes (Origem: Tabela `clients`)
       const { data: clientsData, error: errC } = await supabase
         .from('clients')
-        .select('id, cnpj, razao_social, nome_grupo, segmento, regime');
+        .select('id, cnpj, razao_social, nome_grupo, segmento, regime, tipo_contrato, status_poc');
       if (errC) throw errC;
 
       const totalClientsCount = clientsData?.length || 0;
       
+      // Calcular estatísticas da POC
+      const totalPocsCount = clientsData?.filter(c => c.tipo_contrato === 'poc').length || 0;
+      const pocsEmAndamentoCount = clientsData?.filter(c => c.tipo_contrato === 'poc' && (!c.status_poc || c.status_poc === 'em_andamento')).length || 0;
+      const pocsConvertidasCount = clientsData?.filter(c => c.tipo_contrato === 'poc' && c.status_poc === 'convertido').length || 0;
+      const taxaConversaoPoc = totalPocsCount > 0 ? Math.round((pocsConvertidasCount / totalPocsCount) * 100) : 0;
+
       // Calcular Raiz de CNPJ (8 primeiros dígitos numéricos)
       const raizesUnicas = new Set((clientsData || []).map(c => {
         const clean = c.cnpj.replace(/\D/g, '');
@@ -167,7 +179,11 @@ export default function Dashboard() {
         fase3EmAndamentoAno: f3InProgress,
         matrixConforme: conformeCount,
         matrixPendente: pendentesCount,
-        matrixCritico: criticosCount
+        matrixCritico: criticosCount,
+        totalPocs: totalPocsCount,
+        pocsEmAndamento: pocsEmAndamentoCount,
+        pocsConvertidas: pocsConvertidasCount,
+        taxaConversaoPoc
       });
 
       // Mapear dados da Timeline Resumida por Raiz do CNPJ / Grupo (Item 11)
@@ -408,134 +424,102 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col w-full gap-8">
-      {/* ──────── Header Superior ──────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard Geral</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Consolidado executivo integrado dos módulos <strong>Checklist Fiscal</strong>, <strong>Fluxo de Trabalho</strong> e <strong>Clientes</strong>.
-          </p>
-        </div>
-        <button
-          onClick={fetchDashboardData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
-          Atualizar Dados
-        </button>
-      </div>
-
-      {/* ──────── Top KPI Cards (Com Indicação de Origem de Dados) ──────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Total de Empresas & Raiz CNPJ (Item 10) */}
-        <div className="bg-white rounded-2xl p-5 shadow-2xs border border-slate-200 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total de Empresas / Raiz CNPJ</span>
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
+      {/* ──────── Cabeçalho Hero do Dashboard Geral ──────── */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden animate-in fade-in duration-300">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
+            <LayoutDashboard className="w-7 h-7" />
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-slate-900 flex items-baseline gap-2">
-              <AnimatedCounter end={stats.totalClients} />
-              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                {stats.totalRaizCnpj} Grupos (Raiz)
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 uppercase tracking-wider">
+                Visão Executiva 360°
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">CNPJs cadastrados | {stats.totalRaizCnpj} Raízes CNPJ únicas</p>
-          </div>
-          <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span className="flex items-center gap-1">
-              <Database className="w-3 h-3 text-indigo-500" />
-              Tabela: <strong className="text-slate-600 font-semibold">clients (cnpj)</strong>
-            </span>
-            <Link to="/clientes" className="text-indigo-600 hover:text-indigo-800 font-sans font-semibold flex items-center gap-0.5">
-              Ver <ArrowUpRight className="w-3 h-3" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Card 2: Fase 1 - Diagnósticos */}
-        <div className="bg-white rounded-2xl p-5 shadow-2xs border border-indigo-100 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group bg-gradient-to-br from-white to-indigo-50/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">Fase 1: Diagnóstico</span>
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Compass className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-indigo-950 flex items-baseline gap-1.5">
-              <AnimatedCounter end={stats.fase1Concluidos} />
-              <span className="text-sm font-normal text-slate-500">/ {stats.totalClients} concluídos</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">{stats.fase1EmAndamento} em andamento</p>
-          </div>
-          <div className="mt-4 pt-2.5 border-t border-indigo-100/60 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span className="flex items-center gap-1">
-              <Database className="w-3 h-3 text-indigo-500" />
-              workflow_pipelines (fase_1)
-            </span>
-            <Link to="/fluxo-de-trabalho" className="text-indigo-600 hover:text-indigo-800 font-sans font-semibold flex items-center gap-0.5">
-              Ver <ArrowUpRight className="w-3 h-3" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Card 3: Fase 2 - Plano de Ação */}
-        <div className="bg-white rounded-2xl p-5 shadow-2xs border border-blue-100 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group bg-gradient-to-br from-white to-blue-50/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Fase 2: Plano de Ação</span>
-            <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-              <FileCheck className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-blue-950 flex items-baseline gap-1.5">
-              <AnimatedCounter end={stats.fase2ConcluidosAno} />
-              <span className="text-sm font-normal text-slate-500">meses concluídos</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {stats.fase2EmAndamentoAno} meses em andamento ({currentYear})
+            <h1 className="text-2xl font-black text-white mt-1 tracking-tight">
+              Dashboard Geral
+            </h1>
+            <p className="text-xs text-indigo-100/80 mt-1 max-w-xl">
+              Consolidado executivo integrado dos módulos <strong>Checklist Fiscal</strong>, <strong>Cliente Recorrente</strong> e <strong>POC</strong>.
             </p>
           </div>
-          <div className="mt-4 pt-2.5 border-t border-blue-100/60 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span className="flex items-center gap-1">
-              <Database className="w-3 h-3 text-blue-500" />
-              workflow_pipelines (fase_2)
-            </span>
-            <Link to="/fluxo-de-trabalho" className="text-blue-600 hover:text-blue-800 font-sans font-semibold flex items-center gap-0.5">
-              Ver <ArrowUpRight className="w-3 h-3" />
-            </Link>
-          </div>
         </div>
 
-        {/* Card 4: Fase 3 - Governança */}
-        <div className="bg-white rounded-2xl p-5 shadow-2xs border border-emerald-100 hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group bg-gradient-to-br from-white to-emerald-50/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Fase 3: Governança</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5" />
+        {/* 5 Métricas Rápidas & Atualizar no Header */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
+            {/* Metric 1: Total Empresas */}
+            <div className="flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Empresas</span>
+                <div className="text-xl font-black text-white mt-0.5"><AnimatedCounter end={stats.totalClients} /></div>
+                <span className="text-[10px] text-indigo-200">{stats.totalRaizCnpj} Grupos</span>
+              </div>
+              <Link to="/clientes" className="mt-2 text-[10px] text-indigo-300 hover:text-white font-semibold flex items-center gap-0.5 transition-colors">
+                Ver <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            {/* Metric 2: Diagnóstico (Fase 1) */}
+            <div className="flex flex-col justify-between border-l border-white/10 pl-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">Diagnóstico</span>
+                <div className="text-xl font-black text-indigo-200 mt-0.5"><AnimatedCounter end={stats.fase1Concluidos} /> / {stats.totalClients}</div>
+                <span className="text-[10px] text-indigo-300/80">{stats.fase1EmAndamento} em andamento</span>
+              </div>
+              <Link to="/fluxo-de-trabalho" className="mt-2 text-[10px] text-indigo-300 hover:text-white font-semibold flex items-center gap-0.5 transition-colors">
+                Ver <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            {/* Metric 3: Plano de Ação (Fase 2) */}
+            <div className="flex flex-col justify-between border-l border-white/10 pl-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-blue-300 tracking-wider">Plano Ação</span>
+                <div className="text-xl font-black text-blue-200 mt-0.5"><AnimatedCounter end={stats.fase2ConcluidosAno} /></div>
+                <span className="text-[10px] text-blue-300/80">{stats.fase2EmAndamentoAno} em andamento ({currentYear})</span>
+              </div>
+              <Link to="/fluxo-de-trabalho" className="mt-2 text-[10px] text-blue-300 hover:text-white font-semibold flex items-center gap-0.5 transition-colors">
+                Ver <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            {/* Metric 4: Governança (Fase 3) */}
+            <div className="flex flex-col justify-between border-l border-white/10 pl-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">Governança</span>
+                <div className="text-xl font-black text-emerald-400 mt-0.5"><AnimatedCounter end={stats.fase3ConcluidosAno} /></div>
+                <span className="text-[10px] text-emerald-300/80">{stats.fase3EmAndamentoAno} em andamento ({currentYear})</span>
+              </div>
+              <Link to="/fluxo-de-trabalho" className="mt-2 text-[10px] text-emerald-300 hover:text-white font-semibold flex items-center gap-0.5 transition-colors">
+                Ver <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            {/* Metric 5: Esteira POC */}
+            <div className="flex flex-col justify-between border-l border-white/10 pl-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">Esteira POC</span>
+                <div className="text-xl font-black text-amber-300 mt-0.5"><AnimatedCounter end={stats.pocsEmAndamento} /></div>
+                <span className="text-[10px] text-amber-200/80">{stats.taxaConversaoPoc}% Conv. ({stats.pocsConvertidas}/{stats.totalPocs})</span>
+              </div>
+              <Link to="/poc" className="mt-2 text-[10px] text-amber-300 hover:text-white font-semibold flex items-center gap-0.5 transition-colors">
+                Ver <ArrowUpRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-emerald-950 flex items-baseline gap-1.5">
-              <AnimatedCounter end={stats.fase3ConcluidosAno} />
-              <span className="text-sm font-normal text-slate-500">auditorias concluídas</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {stats.fase3EmAndamentoAno} em andamento ({currentYear})
-            </p>
-          </div>
-          <div className="mt-4 pt-2.5 border-t border-emerald-100/60 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span className="flex items-center gap-1">
-              <Database className="w-3 h-3 text-emerald-500" />
-              workflow_pipelines (fase_3)
-            </span>
-            <Link to="/fluxo-de-trabalho" className="text-emerald-600 hover:text-emerald-800 font-sans font-semibold flex items-center gap-0.5">
-              Ver <ArrowUpRight className="w-3 h-3" />
-            </Link>
-          </div>
+
+          <button
+            onClick={fetchDashboardData}
+            disabled={loading}
+            className="flex items-center justify-center gap-1.5 px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-2xl text-xs font-semibold backdrop-blur-md transition-colors cursor-pointer shrink-0"
+            title="Atualizar dados"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-300' : 'text-indigo-300'}`} />
+            <span>Atualizar</span>
+          </button>
         </div>
       </div>
 

@@ -7,7 +7,8 @@ import {
   Search, 
   Calendar, 
   Building2, 
-  RefreshCw 
+  RefreshCw,
+  GitMerge
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
@@ -168,9 +169,12 @@ export default function FluxoTrabalho() {
   const [detailModalStartToBe, setDetailModalStartToBe] = useState<string>('');
   const [detailModalSelectedMemberIds, setDetailModalSelectedMemberIds] = useState<string[]>([]);
 
-  // Clientes filtrados por Busca, Regime e Segmento
+  // Clientes filtrados por Busca, Regime, Segmento e Tipo de Contrato (Apenas Recorrentes)
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
+      // Empresas em POC ativa ficam restritas ao Módulo POC; só entram no Fluxo de Trabalho ao converter
+      if (c.tipo_contrato === 'poc') return false;
+
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
         c.razao_social.toLowerCase().includes(searchLower) ||
@@ -661,9 +665,10 @@ export default function FluxoTrabalho() {
     }
   };
 
-  // Estatísticas do Topo Normalizadas
+  // Estatísticas do Topo Normalizadas (Apenas Clientes Recorrentes)
   const topStats = useMemo(() => {
-    const totalClients = clients.length;
+    const recurrentClients = clients.filter(c => c.tipo_contrato !== 'poc');
+    const totalClients = recurrentClients.length;
     const f1Concluidos = pipelines.filter(p => p.fase_grupo === 'fase_1' && p.status === 'concluido').length;
     const f1EmAndamento = pipelines.filter(p => p.fase_grupo === 'fase_1' && p.status !== 'concluido').length;
     const f2NoAno = pipelines.filter(p => p.fase_grupo === 'fase_2' && p.ano_referencia === selectedYear && p.status === 'concluido').length;
@@ -696,114 +701,86 @@ export default function FluxoTrabalho() {
   }, [pipelines, selectedYear]);
 
   return (
-    <div className="flex flex-col w-full gap-8 relative p-2">
-      {/* Header Superior */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end pb-4 border-b border-slate-200 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-3xl font-bold text-slate-900">Fluxo de Trabalho</h1>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-              3 Fases Integradas
-            </span>
+    <div className="flex flex-col w-full gap-6 relative p-2 animate-in fade-in duration-300">
+      {/* Cabeçalho Hero do Módulo Cliente Recorrente */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
+            <GitMerge className="w-7 h-7" />
           </div>
-          <p className="text-slate-600 text-sm max-w-3xl">
-            Acompanhe a jornada completa de cada empresa através de <strong>Diagnóstico</strong>, <strong>Plano de Ação</strong> e <strong>Governança</strong>.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 uppercase tracking-wider">
+                3 Fases Integradas
+              </span>
+            </div>
+            <h1 className="text-2xl font-black text-white mt-1 tracking-tight">
+              Cliente Recorrente
+            </h1>
+            <p className="text-xs text-indigo-100/80 mt-1 max-w-xl">
+              Acompanhe a jornada completa de cada empresa através de <strong>Diagnóstico</strong>, <strong>Plano de Ação</strong> e <strong>Governança</strong>.
+            </p>
+          </div>
         </div>
 
-        {/* Seletor de Ano & Atualizar */}
-        <div className="flex items-center gap-3 self-end sm:self-auto">
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-2xs">
-            <Calendar className="w-4 h-4 text-indigo-600" />
-            <span className="text-xs font-semibold text-slate-600">Ano:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="text-xs font-bold text-slate-900 bg-transparent outline-none cursor-pointer"
+        {/* Métricas Rápidas & Controles no Header */}
+        <div className="flex flex-col gap-3 relative z-10 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
+            {/* Metric 1: Empresas Monitoradas */}
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Empresas</span>
+              <span className="text-xl font-black text-white mt-0.5">{topStats.totalClients}</span>
+              <span className="text-[10px] text-slate-400">Ativas cadastradas</span>
+            </div>
+
+            {/* Metric 2: Fase 1 */}
+            <div className="flex flex-col border-l border-white/10 pl-3">
+              <span className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">Diagnóstico</span>
+              <span className="text-xl font-black text-indigo-200 mt-0.5">{topStats.f1Concluidos} / {topStats.totalClients}</span>
+              <span className="text-[10px] text-indigo-300/80">{topStats.f1EmAndamento} em andamento</span>
+            </div>
+
+            {/* Metric 3: Fase 2 */}
+            <div className="flex flex-col border-l border-white/10 pl-3">
+              <span className="text-[10px] uppercase font-bold text-blue-300 tracking-wider">Plano Ação</span>
+              <span className="text-xl font-black text-blue-200 mt-0.5">{topStats.f2NoAno}</span>
+              <span className="text-[10px] text-blue-300/80">{topStats.f2EmAndamento} em andamento ({selectedYear})</span>
+            </div>
+
+            {/* Metric 4: Fase 3 */}
+            <div className="flex flex-col border-l border-white/10 pl-3">
+              <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">Governança</span>
+              <span className="text-xl font-black text-emerald-400 mt-0.5">{topStats.f3NoAno}</span>
+              <span className="text-[10px] text-emerald-300/80">{topStats.f3EmAndamento} em andamento ({selectedYear})</span>
+            </div>
+          </div>
+
+          {/* Controls Bar inside Header */}
+          <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl px-3 py-1.5 text-white">
+              <Calendar className="w-3.5 h-3.5 text-indigo-300" />
+              <span className="text-[11px] font-semibold text-slate-300">Ano:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="text-xs font-bold text-white bg-transparent outline-none cursor-pointer [&>option]:text-slate-900"
+              >
+                {availableYears.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={fetchData}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl text-xs font-semibold backdrop-blur-md transition-colors cursor-pointer"
+              title="Recarregar dados"
             >
-              {availableYears.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={fetchData}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-            title="Recarregar dados"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-            Atualizar
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Ribbon Normalizado */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Empresas Monitoradas */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Empresas Monitoradas</span>
-            <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
-              <Building2 className="w-4.5 h-4.5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-slate-900">
-              {topStats.totalClients}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Empresas ativas cadastradas</p>
-          </div>
-        </div>
-
-        {/* Card 2: Fase 1 - Diagnóstico */}
-        <div className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all bg-gradient-to-br from-white to-indigo-50/25">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">Fase 1: Diagnóstico</span>
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700">
-              <Compass className="w-4.5 h-4.5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-indigo-950 flex items-baseline gap-1.5">
-              <span>{topStats.f1Concluidos}</span>
-              <span className="text-sm font-normal text-slate-500">/ {topStats.totalClients} concluídos</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">{topStats.f1EmAndamento} em andamento</p>
-          </div>
-        </div>
-
-        {/* Card 3: Fase 2 - Plano de Ação */}
-        <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all bg-gradient-to-br from-white to-blue-50/25">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Fase 2: Plano de Ação</span>
-            <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
-              <FileCheck className="w-4.5 h-4.5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-blue-950 flex items-baseline gap-1.5">
-              <span>{topStats.f2NoAno}</span>
-              <span className="text-sm font-normal text-slate-500">meses concluídos</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">{topStats.f2EmAndamento} meses em andamento ({selectedYear})</p>
-          </div>
-        </div>
-
-        {/* Card 4: Fase 3 - Governança */}
-        <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-2xs flex flex-col justify-between hover:shadow-md transition-all bg-gradient-to-br from-white to-emerald-50/25">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Fase 3: Governança</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
-              <ShieldCheck className="w-4.5 h-4.5" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-3xl font-bold text-emerald-950 flex items-baseline gap-1.5">
-              <span>{topStats.f3NoAno}</span>
-              <span className="text-sm font-normal text-slate-500">auditorias concluídas</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">{topStats.f3EmAndamento} em andamento ({selectedYear})</p>
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-300" />
+              Atualizar
+            </button>
           </div>
         </div>
       </div>

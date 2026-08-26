@@ -447,11 +447,17 @@ export default function Checklist() {
     }
   };
 
-  const filteredClients = clients.filter(c =>
-    c.razao_social.toLowerCase().includes(search.toLowerCase()) ||
-    c.cnpj.includes(search) ||
-    (c.nome_grupo && c.nome_grupo.toLowerCase().includes(search.toLowerCase()))
-  );
+  const [contratoFilter, setContratoFilter] = useState<'todos' | 'recorrente' | 'poc'>('todos');
+
+  const filteredClients = clients.filter(c => {
+    const cTipo = c.tipo_contrato || 'recorrente';
+    if (contratoFilter !== 'todos' && cTipo !== contratoFilter) return false;
+    return (
+      c.razao_social.toLowerCase().includes(search.toLowerCase()) ||
+      c.cnpj.includes(search) ||
+      (c.nome_grupo && c.nome_grupo.toLowerCase().includes(search.toLowerCase()))
+    );
+  });
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -515,6 +521,40 @@ export default function Checklist() {
 
           {/* Separador visual */}
           <div className="w-px h-6 bg-slate-200 hidden md:block" />
+
+          {/* Filtro por Tipo de Contrato */}
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setContratoFilter('todos')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+                contratoFilter === 'todos' ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setContratoFilter('recorrente')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+                contratoFilter === 'recorrente' ? "bg-indigo-600 text-white shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              Recorrentes
+            </button>
+            <button
+              type="button"
+              onClick={() => setContratoFilter('poc')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
+                contratoFilter === 'poc' ? "bg-amber-600 text-white shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              POCs 🧪
+            </button>
+          </div>
 
           {/* Alternador de Visão */}
           <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">

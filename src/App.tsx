@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Clientes from './pages/Clientes';
+import Poc from './pages/Poc';
 import Checklist from './pages/Checklist';
 import FluxoTrabalho from './pages/FluxoTrabalho';
 import Configuracoes from './pages/Configuracoes';
@@ -49,6 +50,7 @@ function MainLayout() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clientes" element={<Clientes />} />
+            <Route path="/poc" element={<Poc />} />
             <Route path="/checklist" element={<Checklist />} />
             <Route path="/fluxo-de-trabalho" element={<FluxoTrabalho />} />
             <Route path="/fluxo-trabalho" element={<Navigate to="/fluxo-de-trabalho" replace />} />
