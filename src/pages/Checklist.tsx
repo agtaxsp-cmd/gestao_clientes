@@ -692,11 +692,11 @@ export default function Checklist() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto scrollbar-thin">
             <table className="w-full text-left border-collapse min-w-[1000px]">
-              <thead>
+              <thead className="sticky top-0 z-20">
                 <tr className="bg-white border-b border-slate-200 text-xs font-semibold text-slate-600">
-                  <th className="py-4 px-6 sticky left-0 bg-white shadow-[1px_0_0_rgba(0,0,0,0.05)] w-72">Razão Social / Cliente</th>
+                  <th className="py-4 px-6 sticky left-0 z-30 bg-white shadow-[1px_0_0_rgba(0,0,0,0.05)] w-72">Razão Social / Cliente</th>
                   <th className="py-4 px-4">CNPJ</th>
                   {MESES.map(m => (
                     <th key={m.id} className="py-4 px-2 text-center w-14">
@@ -712,8 +712,8 @@ export default function Checklist() {
                   </tr>
                 ) : (
                   filteredClients.map(client => (
-                    <tr key={client.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-6 sticky left-0 bg-inherit font-medium text-slate-900 shadow-[1px_0_0_rgba(0,0,0,0.03)] truncate max-w-[250px]">
+                    <tr key={client.id} className="group hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-6 sticky left-0 z-10 bg-white group-hover:bg-slate-50/80 font-medium text-slate-900 shadow-[1px_0_0_rgba(0,0,0,0.03)] truncate max-w-[250px]">
                         {client.razao_social}
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-slate-500 whitespace-nowrap">
