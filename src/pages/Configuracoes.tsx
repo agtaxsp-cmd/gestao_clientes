@@ -700,7 +700,7 @@ export default function Configuracoes() {
               const meta = GRUPO_LABELS[grupoKey];
               const IconComp = meta.icon;
               const groupPhases = phases
-                .filter(p => p.grupo_fase === grupoKey && (grupoKey === 'fase_poc' || p.regime === selectedRegimeFilter))
+                .filter(p => p.grupo_fase === grupoKey && p.regime === selectedRegimeFilter)
                 .sort((a, b) => a.ordem - b.ordem);
 
               return (

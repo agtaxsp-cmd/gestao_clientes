@@ -558,15 +558,19 @@ export default function Poc() {
 
                   {/* Passos da POC */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
-                    {(pocPhases.length > 0 ? pocPhases : [
-                      { id: '1', key: 'poc_coleta_amostra', nome: 'COLETA DE AMOSTRA / ACESSO', ordem: 1, grupo_fase: 'fase_poc' as const },
-                      { id: '2', key: 'poc_processamento', nome: 'AUDITORIA DA AMOSTRA (AS-IS)', ordem: 2, grupo_fase: 'fase_poc' as const },
-                      { id: '3', key: 'poc_apresentacao', nome: 'APRESENTAÇÃO DO DIAGNÓSTICO', ordem: 3, grupo_fase: 'fase_poc' as const }
-                    ]).map((f, idx) => {
-                      const stepIndex = idx + 1;
-                      const stepKey = String(stepIndex);
-                      const isCompleted = isPocConverted || currentStepNum > stepIndex;
-                      const isCurrent = !isPocConverted && currentStepNum === stepIndex;
+                    {(() => {
+                      const clientPocPhases = pocPhases.filter(p => !p.regime || p.regime === 'geral' || p.regime === regime);
+                      const activePhases = clientPocPhases.length > 0 ? clientPocPhases : [
+                        { id: '1', key: 'poc_coleta_amostra', nome: 'COLETA DE AMOSTRA / ACESSO', ordem: 1, grupo_fase: 'fase_poc' as const },
+                        { id: '2', key: 'poc_processamento', nome: 'AUDITORIA DA AMOSTRA (AS-IS)', ordem: 2, grupo_fase: 'fase_poc' as const },
+                        { id: '3', key: 'poc_apresentacao', nome: 'APRESENTAÇÃO DO DIAGNÓSTICO', ordem: 3, grupo_fase: 'fase_poc' as const }
+                      ];
+
+                      return activePhases.map((f, idx) => {
+                        const stepIndex = idx + 1;
+                        const stepKey = String(stepIndex);
+                        const isCompleted = isPocConverted || currentStepNum > stepIndex;
+                        const isCurrent = !isPocConverted && currentStepNum === stepIndex;
 
                       const hasNotes = Boolean(pipe?.observacoes_etapas?.[stepKey]);
                       const hasPath = Boolean(pipe?.caminhos_rede_etapas?.[stepKey]);
@@ -640,8 +644,9 @@ export default function Poc() {
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    });
+                  })()}
+                </div>
                 </div>
               </div>
             );
