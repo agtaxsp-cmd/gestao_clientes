@@ -10,7 +10,6 @@ import {
   Sparkles, 
   Check, 
   X, 
-  Building2,
   Layers,
   Folder,
   FileText,
@@ -20,7 +19,7 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatCNPJ } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { logActivity } from '../lib/logger';
 
@@ -56,6 +55,13 @@ export default function Poc() {
   const [stepModalBackupId, setStepModalBackupId] = useState<string>('');
   const [stepModalStatus, setStepModalStatus] = useState<'cinza' | 'amarelo' | 'verde' | 'vermelho'>('cinza');
   const [savingStepDetail, setSavingStepDetail] = useState(false);
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'PO';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const fetchData = async () => {
     try {
@@ -476,177 +482,184 @@ export default function Poc() {
             const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_poc');
             const currentStepNum = pipe?.etapa_atual || 1;
             const isPocConverted = client.status_poc === 'convertido';
+            const isPocDone = isPocConverted || pipe?.status === 'concluido';
+            const clientPocPhases = pocPhases.filter(p => !p.regime || p.regime === 'geral' || p.regime === regime);
+            const activePhases = clientPocPhases.length > 0 ? clientPocPhases : [
+              { id: '1', key: 'poc_coleta_amostra', nome: 'COLETA DE AMOSTRA / ACESSO', ordem: 1, grupo_fase: 'fase_poc' as const },
+              { id: '2', key: 'poc_processamento', nome: 'AUDITORIA DA AMOSTRA (AS-IS)', ordem: 2, grupo_fase: 'fase_poc' as const },
+              { id: '3', key: 'poc_apresentacao', nome: 'APRESENTAÇÃO DO DIAGNÓSTICO', ordem: 3, grupo_fase: 'fase_poc' as const }
+            ];
+            const completedSteps = isPocDone
+              ? activePhases.length
+              : Math.max(0, Math.min(currentStepNum - 1, activePhases.length));
 
             return (
               <div 
                 key={client.id}
                 className={cn(
-                  "bg-white rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col gap-4 relative overflow-hidden",
-                  isPocConverted ? "border-emerald-200 bg-emerald-50/10" : "border-slate-200"
+                  "bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all hover:shadow-md",
+                  isPocDone && "border-emerald-200"
                 )}
               >
                 {/* Cabeçalho do Card */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                      <Building2 className="w-5 h-5" />
+                <div className="p-5 bg-gradient-to-r from-slate-50/90 via-white to-slate-50/50 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center font-bold text-amber-800 text-base shadow-2xs border border-amber-200/70 shrink-0">
+                      {getInitials(client.razao_social)}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-mono font-semibold text-slate-400">CNPJ: {client.cnpj}</span>
+                        <h3 className="text-base font-bold text-slate-900">{client.razao_social}</h3>
                         {client.nome_grupo && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                            {client.nome_grupo}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200">
+                            Grupo: {client.nome_grupo}
                           </span>
                         )}
-                        <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold border", regimeMeta.badgeBg, regimeMeta.badgeText, regimeMeta.badgeBorder)}>
+                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold border", regimeMeta.badgeBg, regimeMeta.badgeText, regimeMeta.badgeBorder)}>
                           {regimeMeta.shortLabel}
                         </span>
+                        <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200" title={client.segmento}>
+                          {client.segmento}
+                        </span>
                         <span className={cn(
-                          "px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 uppercase",
-                          isPocConverted 
+                          "px-2 py-0.5 rounded-xl text-[10px] font-bold border flex items-center gap-1 uppercase",
+                          isPocDone
                             ? "bg-emerald-100 text-emerald-800 border-emerald-300" 
                             : "bg-amber-100 text-amber-800 border-amber-300"
                         )}>
                           <FlaskConical className="w-3 h-3" />
-                          {isPocConverted ? 'Convertido p/ Recorrente' : 'POC Em Andamento'}
+                          {isPocDone ? 'POC Concluída' : 'POC Em Andamento'}
                         </span>
                       </div>
-
-                      <h3 className="text-base font-bold text-slate-900 mt-1">
-                        {client.razao_social}
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {client.segmento}
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">
+                        CNPJ: {formatCNPJ(client.cnpj) || '-'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Ações Rápidas */}
-                  <div className="flex items-center gap-2 self-end md:self-auto">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className={cn(
+                      "px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5",
+                      isPocDone
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-amber-50 text-amber-800 border-amber-200"
+                    )}>
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>POC: {completedSteps}/{activePhases.length} etapas</span>
+                    </div>
+
+                    {!isPocDone && (
+                      <button
+                        type="button"
+                        onClick={() => handleAdvancePocStep(client)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+                      >
+                        Avançar Etapa
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     {!isPocConverted && (
                       <button
                         type="button"
                         onClick={() => handleOpenConvertModal(client)}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs hover:from-emerald-700 hover:to-teal-700 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 hover:border-emerald-200 transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
                       >
-                        <Sparkles className="w-4 h-4 text-emerald-200" />
-                        Converter para Recorrente
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Converter
                       </button>
                     )}
                   </div>
                 </div>
 
                 {/* Stepper das Etapas da POC */}
-                <div className="flex flex-col gap-2 bg-slate-50/80 p-4 rounded-xl border border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5 text-amber-600" />
-                      Progresso da POC
-                    </span>
-                    {!isPocConverted && (
-                      <button
-                        type="button"
-                        onClick={() => handleAdvancePocStep(client)}
-                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
-                      >
-                        Avançar Etapa
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                <div className="p-4">
+                  <div className="relative w-full overflow-x-auto scrollbar-thin pb-1">
+                    <div className="absolute top-[20px] left-5 right-5 h-1 bg-slate-100 -translate-y-1/2 z-0 rounded-full" />
+                    <div
+                      className={cn(
+                        "absolute top-[20px] left-5 h-1 -translate-y-1/2 z-0 rounded-full transition-all duration-500",
+                        isPocDone ? "bg-emerald-500" : "bg-amber-500"
+                      )}
+                      style={{
+                        width: activePhases.length <= 1
+                          ? 'calc(100% - 2.5rem)'
+                          : isPocDone
+                            ? 'calc(100% - 2.5rem)'
+                            : `calc(${Math.round(((Math.max(1, currentStepNum) - 1) / Math.max(1, activePhases.length - 1)) * 100)}% * 0.9 + 5%)`
+                      }}
+                    />
 
-                  {/* Passos da POC */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
-                    {(() => {
-                      const clientPocPhases = pocPhases.filter(p => !p.regime || p.regime === 'geral' || p.regime === regime);
-                      const activePhases = clientPocPhases.length > 0 ? clientPocPhases : [
-                        { id: '1', key: 'poc_coleta_amostra', nome: 'COLETA DE AMOSTRA / ACESSO', ordem: 1, grupo_fase: 'fase_poc' as const },
-                        { id: '2', key: 'poc_processamento', nome: 'AUDITORIA DA AMOSTRA (AS-IS)', ordem: 2, grupo_fase: 'fase_poc' as const },
-                        { id: '3', key: 'poc_apresentacao', nome: 'APRESENTAÇÃO DO DIAGNÓSTICO', ordem: 3, grupo_fase: 'fase_poc' as const }
-                      ];
-
-                      return activePhases.map((f, idx) => {
+                    <div
+                      className="grid gap-2 relative z-10 min-w-[620px]"
+                      style={{ gridTemplateColumns: `repeat(${activePhases.length}, minmax(0, 1fr))` }}
+                    >
+                      {activePhases.map((f, idx) => {
                         const stepIndex = idx + 1;
                         const stepKey = String(stepIndex);
-                        const isCompleted = isPocConverted || currentStepNum > stepIndex;
-                        const isCurrent = !isPocConverted && currentStepNum === stepIndex;
+                        const isCompleted = isPocDone || currentStepNum > stepIndex;
+                        const isCurrent = !isPocDone && currentStepNum === stepIndex;
 
-                      const hasNotes = Boolean(pipe?.observacoes_etapas?.[stepKey]);
-                      const hasPath = Boolean(pipe?.caminhos_rede_etapas?.[stepKey]);
-                      const customResp = pipe?.responsaveis_etapas?.[stepKey];
-                      const respPrincipalMember = members.find(m => m.id === customResp?.principal_id);
+                        const hasNotes = Boolean(pipe?.observacoes_etapas?.[stepKey]);
+                        const hasPath = Boolean(pipe?.caminhos_rede_etapas?.[stepKey]);
+                        const customResp = pipe?.responsaveis_etapas?.[stepKey];
+                        const respPrincipalMember = members.find(m => m.id === customResp?.principal_id);
 
-                      return (
-                        <div
-                          key={f.id || f.key}
-                          onClick={() => openPocStepModal(client, f, stepIndex)}
-                          className={cn(
-                            "p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition-all cursor-pointer group hover:shadow-md relative overflow-hidden",
-                            isCompleted ? "bg-emerald-50/70 border-emerald-200 text-emerald-950 hover:bg-emerald-50" :
-                            isCurrent ? "bg-white border-amber-400 text-amber-950 ring-2 ring-amber-200 shadow-xs" :
-                            "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <div className={cn(
-                                "w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs",
-                                isCompleted ? "bg-emerald-600 text-white" :
-                                isCurrent ? "bg-amber-500 text-white" :
-                                "bg-slate-200 text-slate-600"
-                              )}>
-                                {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : stepIndex}
-                              </div>
-                              <div>
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Etapa {stepIndex}</span>
-                                <h4 className="text-xs font-bold text-slate-900 leading-snug mt-0.5">{f.nome}</h4>
-                              </div>
+                        return (
+                          <button
+                            key={f.id || f.key}
+                            type="button"
+                            onClick={() => openPocStepModal(client, f, stepIndex)}
+                            className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-slate-50 transition-all group/step cursor-pointer text-center"
+                            title={`Etapa ${stepIndex}: ${f.nome}`}
+                          >
+                            <div className={cn(
+                              "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-105",
+                              isCompleted && "bg-emerald-500 text-white ring-2 ring-emerald-200",
+                              isCurrent && "bg-amber-500 text-white ring-2 ring-amber-200",
+                              !isCompleted && !isCurrent && "bg-white border-2 border-slate-300 text-slate-500 font-semibold"
+                            )}>
+                              {isCompleted ? <Check className="w-4 h-4 text-white stroke-[3]" /> : stepIndex}
                             </div>
-                            
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPocStepModal(client, f, stepIndex);
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors shrink-0 cursor-pointer"
-                              title="Editar notas, arquivos e responsáveis"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
 
-                          {/* Badges de Atribuição e Anexos */}
-                          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100/80 text-[10px]">
-                            {respPrincipalMember ? (
-                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 flex items-center gap-1">
-                                <User className="w-3 h-3 text-indigo-500" />
-                                {respPrincipalMember.nome.split(' ')[0]}
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 font-medium">Sem responsável</span>
-                            )}
+                            <span className={cn(
+                              "text-[11px] font-bold leading-tight max-w-[145px]",
+                              isCompleted ? "text-emerald-700" : isCurrent ? "text-amber-800" : "text-slate-600"
+                            )}>
+                              {f.nome}
+                            </span>
 
-                            {hasNotes && (
-                              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200 flex items-center gap-1" title="Notas cadastradas">
-                                <FileText className="w-3 h-3 text-blue-500" />
-                                Notas
-                              </span>
-                            )}
+                            <div className="w-full min-h-6 flex items-center justify-center gap-1 flex-wrap text-[10px]">
+                              {respPrincipalMember ? (
+                                <span className="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 flex items-center gap-1 max-w-[110px]">
+                                  <User className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                                  <span className="truncate">{respPrincipalMember.nome.split(' ')[0]}</span>
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-md bg-slate-50 text-slate-400 border border-slate-100">Sem resp.</span>
+                              )}
 
-                            {hasPath && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 font-bold border border-amber-200 flex items-center gap-1" title="Pasta de rede vinculada">
-                                <Folder className="w-3 h-3 text-amber-600" />
-                                Arquivos
+                              {hasNotes && (
+                                <span className="p-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100" title="Notas cadastradas">
+                                  <FileText className="w-3 h-3" />
+                                </span>
+                              )}
+
+                              {hasPath && (
+                                <span className="p-1 rounded-md bg-amber-50 text-amber-800 border border-amber-100" title="Pasta de rede vinculada">
+                                  <Folder className="w-3 h-3" />
+                                </span>
+                              )}
+
+                              <span className="p-1 rounded-md text-slate-400 group-hover/step:text-amber-600 group-hover/step:bg-amber-50" title="Editar etapa">
+                                <Pencil className="w-3 h-3" />
                               </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
