@@ -114,6 +114,7 @@ export interface Client {
   tipo_contrato?: TipoContratoEnum;
   status_poc?: StatusPocEnum | string;
   data_limite_poc?: string | null;
+  data_kickoff?: string | null;
   observacao?: string | null;
   ui_color?: string | null;
   created_at?: string;

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, Save, Lightbulb, Filter, Pencil, Hash, Trash2, Loader2, Tag, Compass, FileCheck, ShieldCheck, FlaskConical, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Building2, Save, Lightbulb, Filter, Pencil, Hash, Trash2, Loader2, Tag, Compass, FileCheck, ShieldCheck, FlaskConical, CheckCircle2, Calendar, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,6 +13,9 @@ import {
 } from '../types';
 import { formatCNPJ, formatCNAE, cleanDigits, cn } from '../lib/utils';
 
+export type SortField = 'data_kickoff' | 'razao_social' | 'cnpj' | 'tipo_contrato' | 'regime' | 'segmento';
+export type SortOrder = 'asc' | 'desc';
+
 export default function Clientes() {
   const { getUserName } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
@@ -22,6 +25,10 @@ export default function Clientes() {
   const [search, setSearch] = useState('');
   const [contratoFilter, setContratoFilter] = useState<'todos' | TipoContratoEnum>('todos');
   
+  // Ordenação (pré-ordenado por data_kickoff asc)
+  const [sortField, setSortField] = useState<SortField>('data_kickoff');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tipoContrato, setTipoContrato] = useState<TipoContratoEnum>('recorrente');
@@ -30,6 +37,7 @@ export default function Clientes() {
   const [razaoSocial, setRazaoSocial] = useState('');
   const [cnaePrincipal, setCnaePrincipal] = useState('');
   const [segmento, setSegmento] = useState<string>('');
+  const [dataKickoff, setDataKickoff] = useState('');
   const [observacao, setObservacao] = useState('');
   const [fasesContratadas, setFasesContratadas] = useState<{ fase_1: boolean; fase_2: boolean; fase_3: boolean }>({
     fase_1: true,
@@ -102,6 +110,7 @@ export default function Clientes() {
             segmento: segmento.trim(),
             regime: computedRegime,
             tipo_contrato: tipoContrato,
+            data_kickoff: dataKickoff || null,
             observacao: observacao.trim() || null,
             updated_at: new Date().toISOString()
           })
@@ -154,6 +163,7 @@ export default function Clientes() {
             regime: computedRegime,
             tipo_contrato: tipoContrato,
             status_poc: tipoContrato === 'poc' ? 'em_andamento' : null,
+            data_kickoff: dataKickoff || null,
             observacao: observacao.trim() || null
           })
           .select()
@@ -207,6 +217,7 @@ export default function Clientes() {
     setRazaoSocial(client.razao_social);
     setCnaePrincipal(formatCNAE(client.cnae_principal));
     setSegmento(client.segmento);
+    setDataKickoff(client.data_kickoff || '');
     setObservacao(client.observacao || '');
 
     // Buscar fases desabilitadas existentes no pipeline
@@ -258,26 +269,64 @@ export default function Clientes() {
     setRazaoSocial('');
     setCnaePrincipal('');
     setSegmento('');
+    setDataKickoff('');
     setObservacao('');
     setFasesContratadas({ fase_1: true, fase_2: true, fase_3: true });
   };
 
-  const filteredClients = clients.filter(c => {
-    const cTipo = c.tipo_contrato || 'recorrente';
-    if (contratoFilter !== 'todos' && cTipo !== contratoFilter) return false;
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
-    const searchLower = search.toLowerCase();
-    const regimeKey = c.regime || getRegimeFromSegmento(c.segmento);
-    const regimeLabel = REGIMES_CONFIG[regimeKey as RegimeEnum]?.shortLabel || '';
-    
-    return (
-      c.razao_social.toLowerCase().includes(searchLower) ||
-      c.cnpj.includes(search) ||
-      (c.nome_grupo && c.nome_grupo.toLowerCase().includes(searchLower)) ||
-      c.segmento.toLowerCase().includes(searchLower) ||
-      regimeLabel.toLowerCase().includes(searchLower)
-    );
-  });
+  const processedClients = useMemo(() => {
+    const filtered = clients.filter(c => {
+      const cTipo = c.tipo_contrato || 'recorrente';
+      if (contratoFilter !== 'todos' && cTipo !== contratoFilter) return false;
+
+      const searchLower = search.toLowerCase();
+      const regimeKey = c.regime || getRegimeFromSegmento(c.segmento);
+      const regimeLabel = REGIMES_CONFIG[regimeKey as RegimeEnum]?.shortLabel || '';
+
+      return (
+        c.razao_social.toLowerCase().includes(searchLower) ||
+        c.cnpj.includes(search) ||
+        (c.nome_grupo && c.nome_grupo.toLowerCase().includes(searchLower)) ||
+        c.segmento.toLowerCase().includes(searchLower) ||
+        regimeLabel.toLowerCase().includes(searchLower)
+      );
+    });
+
+    return [...filtered].sort((a, b) => {
+      let valueA: any = a[sortField];
+      let valueB: any = b[sortField];
+
+      // Caso especial para data_kickoff: nulos por último
+      if (sortField === 'data_kickoff') {
+        if (!valueA && !valueB) return 0;
+        if (!valueA) return 1;
+        if (!valueB) return -1;
+      }
+
+      if (sortField === 'regime') {
+        valueA = REGIMES_CONFIG[(a.regime || getRegimeFromSegmento(a.segmento)) as RegimeEnum]?.shortLabel || '';
+        valueB = REGIMES_CONFIG[(b.regime || getRegimeFromSegmento(b.segmento)) as RegimeEnum]?.shortLabel || '';
+      }
+
+      if (typeof valueA === 'string') {
+        const res = valueA.localeCompare(valueB || '');
+        return sortOrder === 'asc' ? res : -res;
+      }
+
+      if (valueA < valueB) return sortOrder === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [clients, contratoFilter, search, sortField, sortOrder]);
 
   return (
     <div className="flex flex-col w-full gap-8 relative">
@@ -404,8 +453,8 @@ export default function Clientes() {
             </div>
           </div>
           
-          {/* Row 2: Razão Social, Segmento & Regime */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Row 2: Razão Social, Segmento & Regime e Data de Kick off */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-600" htmlFor="razao_social">Razão Social *</label>
               <input 
@@ -417,6 +466,19 @@ export default function Clientes() {
                 required
                 className="w-full h-10 px-4 rounded-xl bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-2xs" 
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-600" htmlFor="data_kickoff">Data do Kick-off</label>
+              <div className="relative">
+                <input 
+                  type="date" 
+                  id="data_kickoff" 
+                  value={dataKickoff}
+                  onChange={(e) => setDataKickoff(e.target.value)}
+                  className="w-full h-10 px-4 rounded-xl bg-white border border-transparent text-sm text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all shadow-2xs cursor-pointer" 
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -566,7 +628,7 @@ export default function Clientes() {
         <div className="p-6 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <Building2 className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-lg font-bold text-slate-900">Lista de Clientes ({filteredClients.length})</h2>
+            <h2 className="text-lg font-bold text-slate-900">Lista de Clientes ({processedClients.length})</h2>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             {/* Pílulas de Filtro por Contrato */}
@@ -622,31 +684,129 @@ export default function Clientes() {
               <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
               Carregando clientes...
             </div>
-          ) : filteredClients.length === 0 ? (
+          ) : processedClients.length === 0 ? (
             <div className="p-16 text-center text-slate-500 text-sm">
               Nenhum cliente cadastrado no momento. Preencha o formulário acima para adicionar.
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
-                <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
-                  <th className="px-6 py-3.5">Razão Social / Grupo</th>
-                  <th className="px-6 py-3.5 whitespace-nowrap min-w-[170px]">CNPJ / CNAE</th>
-                  <th className="px-6 py-3.5 whitespace-nowrap">Contrato / Esteira</th>
-                  <th className="px-6 py-3.5 whitespace-nowrap">Regime Tributário</th>
-                  <th className="px-6 py-3.5 min-w-[180px]">Segmento</th>
+                <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-200 select-none">
+                  {/* Coluna Kick-off (Pré-ordenada por padrão) */}
+                  <th 
+                    onClick={() => handleSort('data_kickoff')}
+                    className="px-6 py-3.5 whitespace-nowrap cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                      <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Data Kick-off</span>
+                      {sortField === 'data_kickoff' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th 
+                    onClick={() => handleSort('razao_social')}
+                    className="px-6 py-3.5 cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Razão Social / Grupo</span>
+                      {sortField === 'razao_social' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th 
+                    onClick={() => handleSort('cnpj')}
+                    className="px-6 py-3.5 whitespace-nowrap min-w-[170px] cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>CNPJ / CNAE</span>
+                      {sortField === 'cnpj' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th 
+                    onClick={() => handleSort('tipo_contrato')}
+                    className="px-6 py-3.5 whitespace-nowrap cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Contrato / Esteira</span>
+                      {sortField === 'tipo_contrato' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th 
+                    onClick={() => handleSort('regime')}
+                    className="px-6 py-3.5 whitespace-nowrap cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Regime Tributário</span>
+                      {sortField === 'regime' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th 
+                    onClick={() => handleSort('segmento')}
+                    className="px-6 py-3.5 min-w-[180px] cursor-pointer hover:bg-slate-100/80 transition-colors group/th"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Segmento</span>
+                      {sortField === 'segmento' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+                  </th>
+
                   <th className="px-6 py-3.5">Observação</th>
                   <th className="px-6 py-3.5 text-right whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-slate-100">
-                {filteredClients.map((client) => {
+                {processedClients.map((client) => {
                   const regimeKey = (client.regime || getRegimeFromSegmento(client.segmento)) as RegimeEnum;
                   const regimeConf = REGIMES_CONFIG[regimeKey] || REGIMES_CONFIG.regular;
                   const isPoc = client.tipo_contrato === 'poc';
 
+                  // Formatar Data de Kick-off (AAAA-MM-DD -> DD/MM/AAAA)
+                  const kickoffFormatted = client.data_kickoff
+                    ? new Date(client.data_kickoff + 'T00:00:00').toLocaleDateString('pt-BR')
+                    : null;
+
                   return (
                     <tr key={client.id} className="hover:bg-slate-50/80 transition-colors group relative border-b border-slate-100 last:border-0">
+                      {/* Célula Data Kick-off */}
+                      <td className="px-6 py-4 whitespace-nowrap font-medium text-xs text-slate-800">
+                        {kickoffFormatted ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200/80 font-bold shadow-2xs">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                            {kickoffFormatted}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal italic text-[11px]">Não definida</span>
+                        )}
+                      </td>
+
                       <td className="px-6 py-4 relative">
                         <div className={`absolute left-0 top-0 bottom-0 w-1 ${regimeConf.barColor} rounded-r-full`}></div>
                         <div className="flex flex-col">

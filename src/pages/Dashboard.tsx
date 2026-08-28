@@ -15,7 +15,11 @@ import {
   UserCheck,
   Search,
   FlaskConical,
-  LayoutDashboard
+  LayoutDashboard,
+  Calendar,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -42,7 +46,7 @@ function AnimatedCounter({ end, duration = 1000 }: { end: number, duration?: num
       if (!startTimestamp) startTimestamp = timestamp;
       const progress = Math.min((timestamp - startTimestamp) / duration, 1);
       setCount(Math.floor(progress * end));
-      
+
       if (progress < 1) {
         animationFrame = window.requestAnimationFrame(step);
       } else {
@@ -82,8 +86,12 @@ export default function Dashboard() {
   });
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [projectsTimeline, setProjectsTimeline] = useState<{ id: string; nomeGrupo: string; razaoSocial: string; raizCnpj: string; qtdFiliais: number; inicio?: string; fim?: string; status: string; greenSteps?: number; maxSteps?: number; pctProgress?: number }[]>([]);
+  const [projectsTimeline, setProjectsTimeline] = useState<{ id: string; nomeGrupo: string; razaoSocial: string; raizCnpj: string; qtdFiliais: number; dataKickoff?: string | null; inicio?: string; fim?: string; status: string; greenSteps?: number; maxSteps?: number; pctProgress?: number }[]>([]);
   const [timelineSearch, setTimelineSearch] = useState<string>('');
+
+  // Ordenação da Timeline Resumida dos Projetos
+  const [timelineSortField, setTimelineSortField] = useState<'dataKickoff' | 'nomeGrupo' | 'razaoSocial' | 'qtdFiliais' | 'raizCnpj' | 'inicio' | 'fim' | 'pctProgress' | 'status'>('dataKickoff');
+  const [timelineSortOrder, setTimelineSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [segmentStats, setSegmentStats] = useState<{ industria: number; comercio: number; servico: number }>({
     industria: 0,
@@ -100,11 +108,13 @@ export default function Dashboard() {
       // 1. Total Clientes, Raiz CNPJ (Item 10) e Regimes (Origem: Tabela `clients`)
       const { data: clientsData, error: errC } = await supabase
         .from('clients')
-        .select('id, cnpj, razao_social, nome_grupo, segmento, regime, tipo_contrato, status_poc');
+        .select('id, cnpj, razao_social, nome_grupo, segmento, regime, tipo_contrato, status_poc, data_kickoff');
       if (errC) throw errC;
 
-      const totalClientsCount = clientsData?.length || 0;
-      
+      const recurringClients = (clientsData || []).filter(c => c.tipo_contrato !== 'poc');
+      const recurringClientIds = new Set(recurringClients.map(c => c.id));
+      const totalClientsCount = recurringClients.length;
+
       // Calcular estatísticas da POC
       const totalPocsCount = clientsData?.filter(c => c.tipo_contrato === 'poc').length || 0;
       const pocsEmAndamentoCount = clientsData?.filter(c => c.tipo_contrato === 'poc' && (!c.status_poc || c.status_poc === 'em_andamento')).length || 0;
@@ -112,15 +122,15 @@ export default function Dashboard() {
       const taxaConversaoPoc = totalPocsCount > 0 ? Math.round((pocsConvertidasCount / totalPocsCount) * 100) : 0;
 
       // Calcular Raiz de CNPJ (8 primeiros dígitos numéricos)
-      const raizesUnicas = new Set((clientsData || []).map(c => {
+      const raizesUnicas = new Set(recurringClients.map(c => {
         const clean = c.cnpj.replace(/\D/g, '');
         return clean.slice(0, 8);
       }));
       const totalRaizCount = raizesUnicas.size;
 
-      const regCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'regular').length || 0;
-      const espCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'especifico').length || 0;
-      const difCount = clientsData?.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'diferenciado').length || 0;
+      const regCount = recurringClients.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'regular').length;
+      const espCount = recurringClients.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'especifico').length;
+      const difCount = recurringClients.filter(c => (c.regime || getRegimeFromSegmento(c.segmento)) === 'diferenciado').length;
 
       setSegmentStats({
         industria: regCount,
@@ -159,14 +169,14 @@ export default function Dashboard() {
         .select('*');
       if (errP) throw errP;
 
-      const f1Done = pipelinesData?.filter(p => p.fase_grupo === 'fase_1' && p.status === 'concluido').length || 0;
-      const f1InProgress = pipelinesData?.filter(p => p.fase_grupo === 'fase_1' && p.status !== 'concluido').length || 0;
+      const f1Done = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_1' && p.status === 'concluido').length || 0;
+      const f1InProgress = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_1' && p.status !== 'concluido').length || 0;
 
-      const f2Done = pipelinesData?.filter(p => p.fase_grupo === 'fase_2' && p.ano_referencia === currentYear && p.status === 'concluido').length || 0;
-      const f2InProgress = pipelinesData?.filter(p => p.fase_grupo === 'fase_2' && p.ano_referencia === currentYear && p.status === 'em_andamento').length || 0;
+      const f2Done = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_2' && p.ano_referencia === currentYear && p.status === 'concluido').length || 0;
+      const f2InProgress = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_2' && p.ano_referencia === currentYear && p.status === 'em_andamento').length || 0;
 
-      const f3Done = pipelinesData?.filter(p => p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'concluido').length || 0;
-      const f3InProgress = pipelinesData?.filter(p => p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'em_andamento').length || 0;
+      const f3Done = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'concluido').length || 0;
+      const f3InProgress = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'em_andamento').length || 0;
 
       setStats({
         totalClients: totalClientsCount,
@@ -192,6 +202,7 @@ export default function Dashboard() {
         nomeGrupo?: string | null;
         razaoSocial: string;
         qtdFiliais: number;
+        dataKickoff?: string | null;
         inicio?: string;
         fim?: string;
         status: string;
@@ -199,19 +210,25 @@ export default function Dashboard() {
         maxStepsTotal: number;
       }> = {};
 
-      const totalFase1Steps = (phasesData || []).filter((p: WorkflowPhase) => p.grupo_fase === 'fase_1').length || 7;
-
       (clientsData || []).forEach(c => {
         const clean = (c.cnpj || '').replace(/\D/g, '');
         const raiz = clean.slice(0, 8) || c.id;
         const pipe1 = pipelinesData?.find(p => p.client_id === c.id && p.fase_grupo === 'fase_1');
 
-        // Calcular etapas em verde ou etapa atual
+        // Calcular número real de etapas da Fase 1 especificamente para este cliente (com base no regime dele)
+        const clientRegime = c.regime || getRegimeFromSegmento(c.segmento);
+        const clientFase1Phases = (phasesData || [])
+          .filter((p: WorkflowPhase) => p.grupo_fase === 'fase_1')
+          .filter((p: WorkflowPhase) => !p.regime || p.regime === 'geral' || p.regime === clientRegime);
+
+        const totalClientFase1Steps = clientFase1Phases.length || 7;
+
+        // Calcular etapas concluídas em verde ou etapa atual
         const statusMap = pipe1?.status_etapas || {};
         let greenSteps = Object.values(statusMap).filter(s => s === 'verde').length;
         if (greenSteps === 0 && pipe1) {
-          if (pipe1.status === 'concluido') greenSteps = totalFase1Steps;
-          else if (pipe1.etapa_atual > 1) greenSteps = Math.min(totalFase1Steps, pipe1.etapa_atual - 1);
+          if (pipe1.status === 'concluido') greenSteps = totalClientFase1Steps;
+          else if (pipe1.etapa_atual > 1) greenSteps = Math.min(totalClientFase1Steps, pipe1.etapa_atual - 1);
         }
 
         if (!groupsMap[raiz]) {
@@ -220,19 +237,23 @@ export default function Dashboard() {
             nomeGrupo: c.nome_grupo || null,
             razaoSocial: c.razao_social,
             qtdFiliais: 1,
+            dataKickoff: c.data_kickoff || null,
             inicio: pipe1?.start_as_is || undefined,
             fim: pipe1?.start_to_be || undefined,
             status: pipe1?.status || 'iniciado',
             greenStepsTotal: greenSteps,
-            maxStepsTotal: totalFase1Steps
+            maxStepsTotal: totalClientFase1Steps
           };
         } else {
           groupsMap[raiz].qtdFiliais += 1;
           groupsMap[raiz].greenStepsTotal += greenSteps;
-          groupsMap[raiz].maxStepsTotal += totalFase1Steps;
+          groupsMap[raiz].maxStepsTotal += totalClientFase1Steps;
 
           if (c.nome_grupo && !groupsMap[raiz].nomeGrupo) {
             groupsMap[raiz].nomeGrupo = c.nome_grupo;
+          }
+          if (c.data_kickoff && !groupsMap[raiz].dataKickoff) {
+            groupsMap[raiz].dataKickoff = c.data_kickoff;
           }
           if (pipe1?.start_as_is && !groupsMap[raiz].inicio) {
             groupsMap[raiz].inicio = pipe1.start_as_is;
@@ -251,6 +272,7 @@ export default function Dashboard() {
           razaoSocial: g.razaoSocial,
           raizCnpj: g.raizCnpj,
           qtdFiliais: g.qtdFiliais,
+          dataKickoff: g.dataKickoff,
           inicio: g.inicio,
           fim: g.fim,
           status: g.status,
@@ -881,65 +903,235 @@ export default function Dashboard() {
         </div>
 
         <div className="overflow-x-auto max-h-[480px] overflow-y-auto scrollbar-thin rounded-xl border border-slate-100">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
-              <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                <th className="py-2.5 px-4 bg-slate-50">Grupo Econômico</th>
-                <th className="py-2.5 px-4 bg-slate-50">Empresa</th>
-                <th className="py-2.5 px-4 text-center bg-slate-50">Qtd. Empresas</th>
-                <th className="py-2.5 px-4 text-center bg-slate-50">Raiz CNPJ</th>
-                <th className="py-2.5 px-4 text-center bg-slate-50">Start AS-IS</th>
-                <th className="py-2.5 px-4 text-center bg-slate-50">Start TO-BE</th>
-                <th className="py-2.5 px-4 bg-slate-50">Progresso do Diagnóstico</th>
-                <th className="py-2.5 px-4 text-center bg-slate-50">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs bg-white">
-              {projectsTimeline.filter((item) => {
-                const searchLower = timelineSearch.toLowerCase();
-                const cleanSearch = timelineSearch.replace(/\D/g, '');
-                const cleanRaiz = item.raizCnpj.replace(/\D/g, '');
+          {(() => {
+            const handleTimelineSort = (field: 'dataKickoff' | 'nomeGrupo' | 'razaoSocial' | 'qtdFiliais' | 'raizCnpj' | 'inicio' | 'fim' | 'pctProgress' | 'status') => {
+              if (timelineSortField === field) {
+                setTimelineSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+              } else {
+                setTimelineSortField(field);
+                setTimelineSortOrder('asc');
+              }
+            };
 
-                const matchesGroup = item.nomeGrupo.toLowerCase().includes(searchLower);
-                const matchesName = item.razaoSocial.toLowerCase().includes(searchLower);
-                const matchesRaiz = item.raizCnpj.toLowerCase().includes(searchLower) || (cleanSearch.length > 0 && cleanRaiz.includes(cleanSearch));
+            const filteredTimeline = projectsTimeline.filter((item) => {
+              const searchLower = timelineSearch.toLowerCase();
+              const cleanSearch = timelineSearch.replace(/\D/g, '');
+              const cleanRaiz = item.raizCnpj.replace(/\D/g, '');
 
-                return matchesGroup || matchesName || matchesRaiz;
-              }).map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-indigo-900">{item.nomeGrupo}</td>
-                  <td className="py-3 px-4 font-bold text-slate-800">{item.razaoSocial}</td>
-                  <td className="py-3 px-4 text-center font-semibold text-slate-700">
-                    <span className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-                      {item.qtdFiliais} {item.qtdFiliais > 1 ? 'filiais' : 'matriz'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center font-mono text-indigo-700 font-semibold">{item.raizCnpj}</td>
-                  <td className="py-3 px-4 text-center font-mono text-slate-600">{item.inicio ? item.inicio.split('-').reverse().join('/') : '--/--'}</td>
-                  <td className="py-3 px-4 text-center font-mono text-slate-600">{item.fim ? item.fim.split('-').reverse().join('/') : '--/--'}</td>
-                  <td className="py-3 px-4 min-w-[160px]">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
-                        <span>{item.greenSteps}/{item.maxSteps} Etapas</span>
-                        <span className="text-purple-700 font-bold">{item.pctProgress}%</span>
+              const matchesGroup = item.nomeGrupo.toLowerCase().includes(searchLower);
+              const matchesName = item.razaoSocial.toLowerCase().includes(searchLower);
+              const matchesRaiz = item.raizCnpj.toLowerCase().includes(searchLower) || (cleanSearch.length > 0 && cleanRaiz.includes(cleanSearch));
+
+              return matchesGroup || matchesName || matchesRaiz;
+            });
+
+            const sortedTimeline = [...filteredTimeline].sort((a, b) => {
+              let valA: any = a[timelineSortField];
+              let valB: any = b[timelineSortField];
+
+              if (timelineSortField === 'dataKickoff') {
+                if (!valA && !valB) return 0;
+                if (!valA) return 1;
+                if (!valB) return -1;
+              }
+
+              if (typeof valA === 'string') {
+                const res = valA.localeCompare(valB || '');
+                return timelineSortOrder === 'asc' ? res : -res;
+              }
+
+              if (valA < valB) return timelineSortOrder === 'asc' ? -1 : 1;
+              if (valA > valB) return timelineSortOrder === 'asc' ? 1 : -1;
+              return 0;
+            });
+
+            return (
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                  <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 select-none">
+                    {/* Coluna Kick-off (Pré-ordenada por padrão) */}
+                    <th 
+                      onClick={() => handleTimelineSort('dataKickoff')}
+                      className="py-2.5 px-4 bg-slate-50 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center gap-1 text-purple-700 font-extrabold">
+                        <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Data Kick-off</span>
+                        {timelineSortField === 'dataKickoff' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
                       </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
-                        <div 
-                          className="bg-purple-600 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${item.pctProgress || 0}%` }}
-                        ></div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('nomeGrupo')}
+                      className="py-2.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Grupo Econômico</span>
+                        {timelineSortField === 'nomeGrupo' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-center font-semibold text-slate-700 capitalize">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${item.status === 'concluido' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('razaoSocial')}
+                      className="py-2.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Empresa</span>
+                        {timelineSortField === 'razaoSocial' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('qtdFiliais')}
+                      className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Qtd. Empresas</span>
+                        {timelineSortField === 'qtdFiliais' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('raizCnpj')}
+                      className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Raiz CNPJ</span>
+                        {timelineSortField === 'raizCnpj' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('inicio')}
+                      className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Start AS-IS</span>
+                        {timelineSortField === 'inicio' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('fim')}
+                      className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Start TO-BE</span>
+                        {timelineSortField === 'fim' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('pctProgress')}
+                      className="py-2.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Progresso do Diagnóstico</span>
+                        {timelineSortField === 'pctProgress' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+
+                    <th 
+                      onClick={() => handleTimelineSort('status')}
+                      className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Status</span>
+                        {timelineSortField === 'status' ? (
+                          timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs bg-white">
+                  {sortedTimeline.map((item) => {
+                    const kickoffFormatted = item.dataKickoff
+                      ? new Date(item.dataKickoff + 'T00:00:00').toLocaleDateString('pt-BR')
+                      : null;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 font-mono font-medium text-xs text-slate-800 whitespace-nowrap">
+                          {kickoffFormatted ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200/80 font-bold shadow-2xs">
+                              <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                              {kickoffFormatted}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic text-[11px]">Não definida</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-indigo-900">{item.nomeGrupo}</td>
+                        <td className="py-3 px-4 font-bold text-slate-800">{item.razaoSocial}</td>
+                        <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 border border-slate-200 text-slate-700 font-mono">
+                            {item.qtdFiliais} {item.qtdFiliais > 1 ? 'filiais' : 'matriz'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-indigo-700 font-semibold">{item.raizCnpj}</td>
+                        <td className="py-3 px-4 text-center font-mono text-slate-600">{item.inicio ? item.inicio.split('-').reverse().join('/') : '--/--'}</td>
+                        <td className="py-3 px-4 text-center font-mono text-slate-600">{item.fim ? item.fim.split('-').reverse().join('/') : '--/--'}</td>
+                        <td className="py-3 px-4 min-w-[160px]">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
+                              <span>{item.greenSteps}/{item.maxSteps} Etapas</span>
+                              <span className="text-purple-700 font-bold">{item.pctProgress}%</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex">
+                              <div 
+                                className="bg-purple-600 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${item.pctProgress || 0}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-semibold text-slate-700 capitalize">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${item.status === 'concluido' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       </div>
     </div>
