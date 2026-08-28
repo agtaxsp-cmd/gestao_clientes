@@ -21,7 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { ActivityLog, WorkflowPipeline, WorkflowPhase, WorkflowAssignment, TeamMember, Client } from '../types';
+import { ActivityLog, WorkflowPipeline, WorkflowPhase, WorkflowAssignment, TeamMember, Client, FaseGrupoEnum, getRegimeFromSegmento } from '../types';
 import { cn } from '../lib/utils';
 import { MESES } from './workflow/types';
 
@@ -57,20 +57,37 @@ interface AssignedTask {
   anoReferencia?: number | null;
   isCurrentStep: boolean;
   isBackup?: boolean;
+  assignmentRole: 'principal' | 'backup' | 'multiplo';
 }
 
 interface HeaderProps {
   collapsed?: boolean;
 }
 
+type TeamMemberWithAuth = TeamMember & {
+  email?: string | null;
+  user_id?: string | null;
+  auth_user_id?: string | null;
+  supabase_user_id?: string | null;
+  usuario_id?: string | null;
+};
+
+function normalizeText(value?: string | null) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export default function Header({ collapsed = false }: HeaderProps) {
-  const { loading: authLoading, signOut, getUserName } = useAuth();
+  const { user, loading: authLoading, signOut, getUserName } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<ActivityLog[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<'todas' | 'em_andamento' | 'concluidas'>('em_andamento');
+  const [taskFilter, setTaskFilter] = useState<'todas' | 'em_andamento' | 'concluidas'>('todas');
   const [activeTabMobile, setActiveTabMobile] = useState<'atribuidas' | 'notificacoes'>('atribuidas');
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -112,13 +129,35 @@ export default function Header({ collapsed = false }: HeaderProps) {
       const clients = (clientsData || []) as Client[];
 
       // Encontra o membro correspondente ao usuário logado
-      const matchedMember = members.find(m => 
-        m.nome && (
-          m.nome.trim().toLowerCase() === currentUserName.trim().toLowerCase() ||
-          m.nome.toLowerCase().includes(currentUserName.toLowerCase()) ||
-          currentUserName.toLowerCase().includes(m.nome.toLowerCase())
-        )
-      );
+      const authUserId = user?.id || '';
+      const userEmail = normalizeText(user?.email);
+      const authNames = [
+        currentUserName,
+        user?.user_metadata?.full_name,
+        user?.user_metadata?.name,
+        user?.email?.split('@')[0]
+      ]
+        .map(value => normalizeText(value as string | undefined))
+        .filter(Boolean);
+
+      const matchedMember = (members as TeamMemberWithAuth[]).find(m => {
+        const memberAuthIds = [
+          m.user_id,
+          m.auth_user_id,
+          m.supabase_user_id,
+          m.usuario_id
+        ].filter(Boolean);
+
+        if (authUserId && memberAuthIds.includes(authUserId)) return true;
+        if (userEmail && normalizeText(m.email) === userEmail) return true;
+
+        const memberName = normalizeText(m.nome);
+        return Boolean(memberName) && authNames.some(name => (
+          memberName === name ||
+          (name.length >= 3 && memberName.includes(name)) ||
+          (memberName.length >= 3 && name.includes(memberName))
+        ));
+      });
 
       if (!matchedMember) {
         setAssignedTasks([]);
@@ -132,33 +171,69 @@ export default function Header({ collapsed = false }: HeaderProps) {
 
       const tasks: AssignedTask[] = [];
 
+      const getClientPhasesForGroup = (client: Client, grupo: FaseGrupoEnum) => {
+        const clientRegime = client.regime || getRegimeFromSegmento(client.segmento);
+        return phases
+          .filter(p => p.grupo_fase === grupo)
+          .filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime)
+          .sort((a, b) => a.ordem - b.ordem);
+      };
+
+      const getStepAssignment = (
+        pipe: WorkflowPipeline | undefined,
+        phase: WorkflowPhase,
+        stepNum: number
+      ): { isAssigned: boolean; role: AssignedTask['assignmentRole'] } => {
+        const stepKey = String(stepNum);
+        const customMultipleIds = pipe?.responsaveis_multiplos_etapas?.[stepKey] || [];
+
+        if (customMultipleIds.length > 0) {
+          return {
+            isAssigned: customMultipleIds.includes(matchedMember.id),
+            role: 'multiplo'
+          };
+        }
+
+        const customResp = pipe?.responsaveis_etapas?.[stepKey];
+        const defAssign = defaultAssignMap[phase.key];
+
+        const principalId = customResp?.principal_id !== undefined
+          ? customResp.principal_id
+          : defAssign?.responsavel_principal_id;
+
+        const backupId = customResp?.backup_id !== undefined
+          ? customResp.backup_id
+          : defAssign?.responsavel_backup_id;
+
+        if (principalId === matchedMember.id) {
+          return { isAssigned: true, role: 'principal' };
+        }
+
+        if (backupId === matchedMember.id) {
+          return { isAssigned: true, role: 'backup' };
+        }
+
+        return { isAssigned: false, role: 'principal' };
+      };
+
       clients.forEach(client => {
         // --- Fase 1: Diagnóstico (7 Etapas) ---
-        const f1Phases = phases.filter(p => p.grupo_fase === 'fase_1');
+        const f1Phases = getClientPhasesForGroup(client, 'fase_1');
         const pipeF1 = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
         const f1StepNum = pipeF1?.etapa_atual || 1;
         const isF1Done = pipeF1?.status === 'concluido';
 
-        f1Phases.forEach(phase => {
-          const stepKey = String(phase.ordem);
-          const customResp = pipeF1?.responsaveis_etapas?.[stepKey];
-          const defAssign = defaultAssignMap[phase.key];
+        f1Phases.forEach((phase, index) => {
+          const stepNum = index + 1;
+          const assignment = getStepAssignment(pipeF1, phase, stepNum);
 
-          const principalId = customResp?.principal_id !== undefined
-            ? customResp.principal_id
-            : defAssign?.responsavel_principal_id;
-
-          const backupId = customResp?.backup_id !== undefined
-            ? customResp.backup_id
-            : defAssign?.responsavel_backup_id;
-
-          if (principalId === matchedMember.id || backupId === matchedMember.id) {
+          if (assignment.isAssigned) {
             let stepStatus: 'iniciado' | 'em_andamento' | 'concluido' = 'iniciado';
             let isCurrent = false;
 
-            if (isF1Done || phase.ordem < f1StepNum) {
+            if (isF1Done || stepNum < f1StepNum) {
               stepStatus = 'concluido';
-            } else if (phase.ordem === f1StepNum && !isF1Done) {
+            } else if (stepNum === f1StepNum && !isF1Done) {
               stepStatus = 'em_andamento';
               isCurrent = true;
             }
@@ -171,17 +246,18 @@ export default function Header({ collapsed = false }: HeaderProps) {
               clientSegment: client.segmento,
               faseGrupo: 'fase_1',
               faseNome: 'Fase 1 — Diagnóstico',
-              etapaNum: phase.ordem,
+              etapaNum: stepNum,
               etapaNome: phase.nome,
               status: stepStatus,
               isCurrentStep: isCurrent,
-              isBackup: principalId !== matchedMember.id && backupId === matchedMember.id
+              isBackup: assignment.role === 'backup',
+              assignmentRole: assignment.role
             });
           }
         });
 
         // --- Fase 2: Plano de Ação (12 Meses x 2 Etapas) ---
-        const f2Phases = phases.filter(p => p.grupo_fase === 'fase_2');
+        const f2Phases = getClientPhasesForGroup(client, 'fase_2');
         for (let month = 1; month <= 12; month++) {
           const pipeF2 = pipelines.find(
             p => p.client_id === client.id &&
@@ -193,26 +269,17 @@ export default function Header({ collapsed = false }: HeaderProps) {
           const isF2Done = pipeF2?.status === 'concluido';
           const isF2InProgress = pipeF2?.status === 'em_andamento';
 
-          f2Phases.forEach(phase => {
-            const stepKey = String(phase.ordem);
-            const customResp = pipeF2?.responsaveis_etapas?.[stepKey];
-            const defAssign = defaultAssignMap[phase.key];
+          f2Phases.forEach((phase, index) => {
+            const stepNum = index + 1;
+            const assignment = getStepAssignment(pipeF2, phase, stepNum);
 
-            const principalId = customResp?.principal_id !== undefined
-              ? customResp.principal_id
-              : defAssign?.responsavel_principal_id;
-
-            const backupId = customResp?.backup_id !== undefined
-              ? customResp.backup_id
-              : defAssign?.responsavel_backup_id;
-
-            if (principalId === matchedMember.id || backupId === matchedMember.id) {
+            if (assignment.isAssigned) {
               let stepStatus: 'iniciado' | 'em_andamento' | 'concluido' = 'iniciado';
               let isCurrent = false;
 
-              if (isF2Done || (isF2InProgress && phase.ordem < f2StepNum)) {
+              if (isF2Done || (isF2InProgress && stepNum < f2StepNum)) {
                 stepStatus = 'concluido';
-              } else if (isF2InProgress && phase.ordem === f2StepNum) {
+              } else if (isF2InProgress && stepNum === f2StepNum) {
                 stepStatus = 'em_andamento';
                 isCurrent = true;
               }
@@ -225,20 +292,21 @@ export default function Header({ collapsed = false }: HeaderProps) {
                 clientSegment: client.segmento,
                 faseGrupo: 'fase_2',
                 faseNome: 'Fase 2 — Plano de Ação',
-                etapaNum: phase.ordem,
+                etapaNum: stepNum,
                 etapaNome: phase.nome,
                 mesReferencia: month,
                 anoReferencia: currentYear,
                 status: stepStatus,
                 isCurrentStep: isCurrent,
-                isBackup: principalId !== matchedMember.id && backupId === matchedMember.id
+                isBackup: assignment.role === 'backup',
+                assignmentRole: assignment.role
               });
             }
           });
         }
 
         // --- Fase 3: Governança (12 Meses x 1 Etapa) ---
-        const f3Phases = phases.filter(p => p.grupo_fase === 'fase_3');
+        const f3Phases = getClientPhasesForGroup(client, 'fase_3');
         for (let month = 1; month <= 12; month++) {
           const pipeF3 = pipelines.find(
             p => p.client_id === client.id &&
@@ -249,20 +317,11 @@ export default function Header({ collapsed = false }: HeaderProps) {
           const isF3Done = pipeF3?.status === 'concluido';
           const isF3InProgress = pipeF3?.status === 'em_andamento';
 
-          f3Phases.forEach(phase => {
-            const stepKey = String(phase.ordem);
-            const customResp = pipeF3?.responsaveis_etapas?.[stepKey];
-            const defAssign = defaultAssignMap[phase.key];
+          f3Phases.forEach((phase, index) => {
+            const stepNum = index + 1;
+            const assignment = getStepAssignment(pipeF3, phase, stepNum);
 
-            const principalId = customResp?.principal_id !== undefined
-              ? customResp.principal_id
-              : defAssign?.responsavel_principal_id;
-
-            const backupId = customResp?.backup_id !== undefined
-              ? customResp.backup_id
-              : defAssign?.responsavel_backup_id;
-
-            if (principalId === matchedMember.id || backupId === matchedMember.id) {
+            if (assignment.isAssigned) {
               let stepStatus: 'iniciado' | 'em_andamento' | 'concluido' = 'iniciado';
               let isCurrent = false;
 
@@ -281,13 +340,14 @@ export default function Header({ collapsed = false }: HeaderProps) {
                 clientSegment: client.segmento,
                 faseGrupo: 'fase_3',
                 faseNome: 'Fase 3 — Governança',
-                etapaNum: phase.ordem,
+                etapaNum: stepNum,
                 etapaNome: phase.nome,
                 mesReferencia: month,
                 anoReferencia: currentYear,
                 status: stepStatus,
                 isCurrentStep: isCurrent,
-                isBackup: principalId !== matchedMember.id && backupId === matchedMember.id
+                isBackup: assignment.role === 'backup',
+                assignmentRole: assignment.role
               });
             }
           });
@@ -330,7 +390,7 @@ export default function Header({ collapsed = false }: HeaderProps) {
     return () => {
       supabase.removeChannel(channelLogs);
     };
-  }, [currentUserName]);
+  }, [currentUserName, user?.id, user?.email]);
 
   // Fechar o painel se clicar fora dele
   useEffect(() => {
@@ -518,7 +578,7 @@ export default function Header({ collapsed = false }: HeaderProps) {
                 )}
               >
                 <Briefcase className="w-3.5 h-3.5" />
-                Atribuídas a Mim ({activeTasksCount})
+                Atribuídas a Mim ({assignedTasks.length})
               </button>
               <button
                 onClick={() => setActiveTabMobile('notificacoes')}
@@ -655,7 +715,11 @@ export default function Header({ collapsed = false }: HeaderProps) {
                           {/* Rodapé da Tarefa: Atalho para abrir no Fluxo */}
                           <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
                             <span className="text-slate-400 text-[10px]">
-                              {task.isBackup ? 'Atribuído como Backup' : 'Responsável Principal'}
+                              {task.assignmentRole === 'multiplo'
+                                ? 'Responsável indicado'
+                                : task.isBackup
+                                  ? 'Atribuído como Backup'
+                                  : 'Responsável Principal'}
                             </span>
                             <button
                               onClick={() => {
