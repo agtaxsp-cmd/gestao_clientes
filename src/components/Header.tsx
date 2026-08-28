@@ -87,7 +87,7 @@ export default function Header({ collapsed = false }: HeaderProps) {
   const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<'todas' | 'em_andamento' | 'concluidas'>('todas');
+  const [taskFilter, setTaskFilter] = useState<'todas' | 'em_andamento' | 'planejadas' | 'concluidas'>('todas');
   const [activeTabMobile, setActiveTabMobile] = useState<'atribuidas' | 'notificacoes'>('atribuidas');
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -405,10 +405,15 @@ export default function Header({ collapsed = false }: HeaderProps) {
 
   const unreadCount = notifications.filter((n) => !n.lido).length;
   const activeTasksCount = assignedTasks.filter((t) => t.isCurrentStep || t.status === 'em_andamento').length;
+  const plannedTasksCount = assignedTasks.filter((t) => t.status === 'iniciado' && !t.isCurrentStep).length;
+  const doneTasksCount = assignedTasks.filter((t) => t.status === 'concluido').length;
 
   const filteredTasks = useMemo(() => {
     if (taskFilter === 'em_andamento') {
       return assignedTasks.filter(t => t.isCurrentStep || t.status === 'em_andamento');
+    }
+    if (taskFilter === 'planejadas') {
+      return assignedTasks.filter(t => t.status === 'iniciado' && !t.isCurrentStep);
     }
     if (taskFilter === 'concluidas') {
       return assignedTasks.filter(t => t.status === 'concluido');
@@ -616,7 +621,7 @@ export default function Header({ collapsed = false }: HeaderProps) {
                   </div>
 
                   {/* Filtros rápidos de status */}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       onClick={() => setTaskFilter('em_andamento')}
                       className={cn(
@@ -629,15 +634,15 @@ export default function Header({ collapsed = false }: HeaderProps) {
                       Aguardando Ação ({activeTasksCount})
                     </button>
                     <button
-                      onClick={() => setTaskFilter('todas')}
+                      onClick={() => setTaskFilter('planejadas')}
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
-                        taskFilter === 'todas'
+                        taskFilter === 'planejadas'
                           ? "bg-indigo-600 text-white shadow-2xs"
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       )}
                     >
-                      Todas ({assignedTasks.length})
+                      Futuras ({plannedTasksCount})
                     </button>
                     <button
                       onClick={() => setTaskFilter('concluidas')}
@@ -648,7 +653,18 @@ export default function Header({ collapsed = false }: HeaderProps) {
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       )}
                     >
-                      Concluídas ({assignedTasks.filter(t => t.status === 'concluido').length})
+                      Concluídas ({doneTasksCount})
+                    </button>
+                    <button
+                      onClick={() => setTaskFilter('todas')}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
+                        taskFilter === 'todas'
+                          ? "bg-indigo-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      )}
+                    >
+                      Todas ({assignedTasks.length})
                     </button>
                   </div>
                 </div>
@@ -662,7 +678,9 @@ export default function Header({ collapsed = false }: HeaderProps) {
                       <p className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
                         {taskFilter === 'em_andamento'
                           ? 'Nenhuma tarefa pendente de execução imediata sob sua responsabilidade.'
-                          : 'Nenhuma atribuição encontrada neste filtro.'}
+                          : taskFilter === 'planejadas'
+                            ? 'Nenhuma tarefa futura agendada ou aguardando etapas anteriores.'
+                            : 'Nenhuma atribuição encontrada neste filtro.'}
                       </p>
                     </div>
                   ) : (
