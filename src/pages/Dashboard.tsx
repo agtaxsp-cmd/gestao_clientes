@@ -396,6 +396,50 @@ export default function Dashboard() {
               }
             });
           }
+
+          // Fase POC: Prova de Conceito
+          const clientRegime = client.regime || getRegimeFromSegmento(client.segmento);
+          const pocPhases = allPhases
+            .filter(p => p.grupo_fase === 'fase_poc')
+            .filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime)
+            .sort((a, b) => a.ordem - b.ordem);
+
+          const pipePoc = pipelinesData?.find(p => p.client_id === client.id && p.fase_grupo === 'fase_poc');
+
+          pocPhases.forEach((phase, idx) => {
+            const stepNum = idx + 1;
+            const stepKey = String(stepNum);
+            const customResp = pipePoc?.responsaveis_etapas?.[stepKey];
+            const customMultipleIds = pipePoc?.responsaveis_multiplos_etapas?.[stepKey] || [];
+            const defAssign = defaultAssignMap[phase.key];
+
+            const isAssignedViaMultiple = customMultipleIds.length > 0 && customMultipleIds.includes(member.id);
+
+            const principalId = (customResp && customResp.principal_id !== undefined)
+              ? customResp.principal_id
+              : defAssign?.responsavel_principal_id;
+
+            const backupId = (customResp && customResp.backup_id !== undefined)
+              ? customResp.backup_id
+              : defAssign?.responsavel_backup_id;
+
+            const isPrincipal = principalId === member.id || isAssignedViaMultiple;
+            const isBackup = backupId === member.id && !isAssignedViaMultiple;
+
+            const isStepConcluded = client.status_poc === 'convertido' || pipePoc?.status === 'concluido' || (pipePoc?.etapa_atual ? stepNum < pipePoc.etapa_atual : false);
+
+            if (isPrincipal) {
+              principaisCount++;
+              if (isStepConcluded) {
+                concluidasCount++;
+              } else if (pipePoc?.etapa_atual === stepNum && pipePoc?.status !== 'concluido') {
+                emAndamentoCount++;
+              }
+            }
+            if (isBackup) {
+              backupCount++;
+            }
+          });
         });
 
         return {
