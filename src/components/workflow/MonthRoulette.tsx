@@ -6,9 +6,10 @@ import {
   ChevronRight, 
   ChevronLeft,
   ShieldCheck, 
-  Clock 
+  Clock,
+  Ban
 } from 'lucide-react';
-import { WorkflowPipeline, Client, WorkflowPhase } from '../../types';
+import { WorkflowPipeline, Client, WorkflowPhase, normalizeStepStatus, STEP_STATUS_MAP } from '../../types';
 import { MESES } from './types';
 import { cn } from '../../lib/utils';
 
@@ -143,8 +144,16 @@ export default function MonthRoulette({
           const pipe = getMonthlyPipe(m.id);
           const isConcluido = pipe?.status === 'concluido';
           const step = pipe?.etapa_atual || 0;
-          const isElaborarDone = isConcluido || step >= 2;
-          const isAcompDone = isConcluido;
+
+          const rawStatusStep1 = pipe?.status_etapas?.['1'];
+          const statusStep1 = rawStatusStep1
+            ? normalizeStepStatus(rawStatusStep1)
+            : (isConcluido || step >= 2 ? 'concluido' : step === 1 ? 'em_andamento' : 'pendente');
+
+          const rawStatusStep2 = pipe?.status_etapas?.['2'];
+          const statusStep2 = rawStatusStep2
+            ? normalizeStepStatus(rawStatusStep2)
+            : (isConcluido ? 'concluido' : step === 2 ? 'em_andamento' : 'pendente');
 
           return (
             <div
@@ -189,13 +198,20 @@ export default function MonthRoulette({
                     type="button"
                     onClick={() => onOpenDetail(client, grupo, 1, m.id)}
                     className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
-                    title="Clique para gerenciar notas, arquivos e responsáveis da etapa 1"
+                    title={`Etapa 1: Elaborar (${STEP_STATUS_MAP[statusStep1]?.label || statusStep1})`}
                   >
-                    <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900">1. Elaborar</span>
-                    {isElaborarDone ? (
+                    <span className={cn(
+                      "font-semibold group-hover/step:text-indigo-900",
+                      statusStep1 === 'na' ? "text-slate-400 line-through" : "text-slate-700"
+                    )}>
+                      1. Elaborar
+                    </span>
+                    {statusStep1 === 'concluido' ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                    ) : step === 1 ? (
-                      <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                    ) : statusStep1 === 'na' ? (
+                      <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-slate-100 text-slate-500 rounded border border-slate-200">N/A</span>
+                    ) : statusStep1 === 'em_andamento' ? (
+                      <Hourglass className="w-3.5 h-3.5 text-amber-600 animate-spin" />
                     ) : (
                       <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                     )}
@@ -204,13 +220,20 @@ export default function MonthRoulette({
                     type="button"
                     onClick={() => onOpenDetail(client, grupo, 2, m.id)}
                     className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
-                    title="Clique para gerenciar notas, arquivos e responsáveis da etapa 2"
+                    title={`Etapa 2: Acompanhamento (${STEP_STATUS_MAP[statusStep2]?.label || statusStep2})`}
                   >
-                    <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900">2. Acompanhamento</span>
-                    {isAcompDone ? (
+                    <span className={cn(
+                      "font-semibold group-hover/step:text-indigo-900",
+                      statusStep2 === 'na' ? "text-slate-400 line-through" : "text-slate-700"
+                    )}>
+                      2. Acompanhamento
+                    </span>
+                    {statusStep2 === 'concluido' ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                    ) : step === 2 ? (
-                      <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                    ) : statusStep2 === 'na' ? (
+                      <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-slate-100 text-slate-500 rounded border border-slate-200">N/A</span>
+                    ) : statusStep2 === 'em_andamento' ? (
+                      <Hourglass className="w-3.5 h-3.5 text-amber-600 animate-spin" />
                     ) : (
                       <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
                     )}
@@ -221,8 +244,11 @@ export default function MonthRoulette({
                   {fasesGovernanca.length > 0 ? (
                     fasesGovernanca.map((f, idx) => {
                       const stepIndex = idx + 1;
-                      const isDone = isConcluido || step > stepIndex;
-                      const isCurrent = step === stepIndex;
+                      const stepKey = String(stepIndex);
+                      const rawSt = pipe?.status_etapas?.[stepKey];
+                      const stStatus = rawSt
+                        ? normalizeStepStatus(rawSt)
+                        : (isConcluido || step > stepIndex ? 'concluido' : step === stepIndex ? 'em_andamento' : 'pendente');
 
                       return (
                         <button
@@ -230,18 +256,31 @@ export default function MonthRoulette({
                           type="button"
                           onClick={() => onOpenDetail(client, grupo, stepIndex, m.id)}
                           className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/80 border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer text-left group/step"
-                          title={`Clique para gerenciar notas, arquivos e responsáveis de "${f.nome}"`}
+                          title={`Clique para gerenciar notas, arquivos e responsáveis de "${f.nome}" (${STEP_STATUS_MAP[stStatus]?.label || stStatus})`}
                         >
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className={cn("w-3.5 h-3.5", isDone ? "text-emerald-600" : isCurrent ? "text-blue-600 font-bold" : "text-slate-400 group-hover/step:text-indigo-600")} />
-                            <span className="font-semibold text-slate-700 group-hover/step:text-indigo-900 truncate max-w-[160px]">{stepIndex}. {f.nome}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <ShieldCheck className={cn(
+                              "w-3.5 h-3.5 shrink-0",
+                              stStatus === 'concluido' ? "text-emerald-600" :
+                              stStatus === 'em_andamento' ? "text-amber-600 font-bold" :
+                              stStatus === 'na' ? "text-slate-400" :
+                              "text-slate-400 group-hover/step:text-indigo-600"
+                            )} />
+                            <span className={cn(
+                              "font-semibold group-hover/step:text-indigo-900 truncate max-w-[160px]",
+                              stStatus === 'na' && "text-slate-400 line-through"
+                            )}>
+                              {stepIndex}. {f.nome}
+                            </span>
                           </div>
-                          {isDone ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                          ) : isCurrent ? (
-                            <Hourglass className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                          {stStatus === 'concluido' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3] shrink-0" />
+                          ) : stStatus === 'na' ? (
+                            <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-slate-100 text-slate-500 rounded border border-slate-200 shrink-0">N/A</span>
+                          ) : stStatus === 'em_andamento' ? (
+                            <Hourglass className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
                           ) : (
-                            <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600" />
+                            <Clock className="w-3.5 h-3.5 text-slate-400 group-hover/step:text-indigo-600 shrink-0" />
                           )}
                         </button>
                       );

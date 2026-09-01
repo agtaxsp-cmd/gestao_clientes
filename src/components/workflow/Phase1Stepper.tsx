@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Check, Hourglass, ArrowRight, ArrowLeft, User, FileText, Calendar, Edit3, X, AlertTriangle, AlertCircle } from 'lucide-react';
-import { WorkflowPipeline, Client, WorkflowPhase, TeamMember, WorkflowAssignment, EtapaColorStatus } from '../../types';
+import { Check, Hourglass, ArrowRight, ArrowLeft, User, FileText, Calendar, Edit3, X, AlertTriangle, AlertCircle, Ban } from 'lucide-react';
+import { WorkflowPipeline, Client, WorkflowPhase, TeamMember, WorkflowAssignment, EtapaColorStatus, normalizeStepStatus, STEP_STATUS_MAP } from '../../types';
 import { cn } from '../../lib/utils';
 
 export interface Phase1StepperProps {
@@ -36,16 +36,17 @@ export default function Phase1Stepper({
   const [editingEscopo, setEditingEscopo] = useState(false);
   const [tempEscopo, setTempEscopo] = useState(periodoEscopo);
 
-  // Alternar status tricolor ao clicar no ícone: verde -> amarelo -> vermelho -> pendente -> verde
+  // Alternar status da etapa ao clicar no ícone: concluído -> em_andamento -> não se aplica -> pendente -> concluído
   const handleToggleStatus = (e: React.MouseEvent, stepNum: number) => {
     e.stopPropagation();
     if (!onUpdateStepStatus) return;
-    const current = statusEtapas[String(stepNum)] || 'pendente';
-    let nextStatus: EtapaColorStatus = 'verde';
-    if (current === 'verde') nextStatus = 'amarelo';
-    else if (current === 'amarelo') nextStatus = 'vermelho';
-    else if (current === 'vermelho') nextStatus = 'pendente';
-    else nextStatus = 'verde';
+    const raw = statusEtapas[String(stepNum)];
+    const current = normalizeStepStatus(raw);
+    let nextStatus: EtapaColorStatus = 'concluido';
+    if (current === 'concluido') nextStatus = 'em_andamento';
+    else if (current === 'em_andamento') nextStatus = 'na';
+    else if (current === 'na') nextStatus = 'pendente';
+    else nextStatus = 'concluido';
 
     onUpdateStepStatus(stepNum, nextStatus);
   };
@@ -164,37 +165,45 @@ export default function Phase1Stepper({
           {fasesDiagnostico.map((phaseObj, index) => {
             const stepNum = index + 1;
             const stepKey = String(stepNum);
-            const stepStatus: EtapaColorStatus = statusEtapas[stepKey] || (stepNum < f1StepNum || isFase1Concluido ? 'verde' : 'pendente');
+            const rawStatus = statusEtapas[stepKey];
+            const stepStatus = rawStatus
+              ? normalizeStepStatus(rawStatus)
+              : (stepNum < f1StepNum || isFase1Concluido ? 'concluido' : 'pendente');
+
             const assign = getStepResponsibles(stepNum, phaseObj.key);
+            const statusMeta = STEP_STATUS_MAP[stepStatus];
 
             return (
               <div
                 key={phaseObj.id || phaseObj.key}
                 onClick={() => onOpenDetail(client, 'fase_1', stepNum)}
                 className="flex flex-col items-center gap-1.5 cursor-pointer p-2 rounded-xl hover:bg-slate-50 transition-all group/step"
-                title={`Etapa ${stepNum}: ${phaseObj.nome}. Clique no ícone para alternar status tricolor.`}
+                title={`Etapa ${stepNum}: ${phaseObj.nome} (${statusMeta?.label || stepStatus}). Clique no ícone para alternar status.`}
               >
-                {/* Círculo da Etapa Tricolor (Clique direto altera status) */}
+                {/* Círculo da Etapa (Clique direto altera status) */}
                 <div
                   onClick={(e) => handleToggleStatus(e, stepNum)}
                   className={cn(
                     "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-110 cursor-pointer",
-                    stepStatus === 'verde' && "bg-emerald-500 text-white ring-2 ring-emerald-200",
-                    stepStatus === 'amarelo' && "bg-amber-400 text-amber-950 ring-2 ring-amber-200 font-bold",
-                    stepStatus === 'vermelho' && "bg-red-500 text-white ring-2 ring-red-200 font-bold",
+                    stepStatus === 'concluido' && "bg-emerald-500 text-white ring-2 ring-emerald-200",
+                    stepStatus === 'em_andamento' && "bg-amber-400 text-amber-950 ring-2 ring-amber-200 font-bold",
+                    stepStatus === 'na' && "bg-slate-200 border-2 border-slate-300 text-slate-500 font-bold",
                     stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-400 font-medium text-xs"
                   )}
                 >
-                  {stepStatus === 'verde' && <Check className="w-4 h-4 text-white stroke-[3]" />}
-                  {stepStatus === 'amarelo' && <AlertTriangle className="w-4 h-4 text-amber-950" />}
-                  {stepStatus === 'vermelho' && <AlertCircle className="w-4 h-4 text-white" />}
+                  {stepStatus === 'concluido' && <Check className="w-4 h-4 text-white stroke-[3]" />}
+                  {stepStatus === 'em_andamento' && <AlertTriangle className="w-4 h-4 text-amber-950" />}
+                  {stepStatus === 'na' && <Ban className="w-4 h-4 text-slate-500" />}
                   {stepStatus === 'pendente' && <span className="text-xs font-semibold text-slate-500">{stepNum}</span>}
                 </div>
 
                 {/* Nome da Etapa */}
                 <span className={cn(
                   "text-[11px] font-bold text-center leading-tight mt-0.5",
-                  stepStatus === 'verde' ? "text-emerald-700" : stepStatus === 'vermelho' ? "text-red-600" : stepStatus === 'amarelo' ? "text-amber-700" : "text-slate-600"
+                  stepStatus === 'concluido' && "text-emerald-700",
+                  stepStatus === 'em_andamento' && "text-amber-700",
+                  stepStatus === 'na' && "text-slate-500 line-through",
+                  stepStatus === 'pendente' && "text-slate-600"
                 )}>
                   {phaseObj.nome}
                 </span>
@@ -224,7 +233,7 @@ export default function Phase1Stepper({
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
         <div className="text-xs text-slate-600 flex items-center gap-2">
           <span className="font-semibold text-slate-800">Mensagem:</span>
-          <span>{pipeFase1?.mensagem_info || 'Diagnóstico pronto para acompanhamento'}</span>
+          <span>{isFase1Concluido ? 'Diagnóstico finalizado com sucesso!' : (pipeFase1?.mensagem_info || 'Diagnóstico pronto para acompanhamento')}</span>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">

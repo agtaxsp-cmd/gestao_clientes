@@ -1,5 +1,5 @@
 import { Calendar, Clock, ArrowRight } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase } from '../../types';
+import { Client, WorkflowPipeline, WorkflowPhase, normalizeStepStatus, STEP_STATUS_MAP } from '../../types';
 import { cn } from '../../lib/utils';
 
 export interface CompanyScheduleTabProps {
@@ -140,7 +140,9 @@ export default function CompanyScheduleTab({
                 const stepNum = index + 1;
                 const stepKey = String(stepNum);
                 const dates = datasEtapas[stepKey];
-                const statusColor = statusEtapas[stepKey] || 'pendente';
+                const rawSt = statusEtapas[stepKey];
+                const stStatus = rawSt ? normalizeStepStatus(rawSt) : 'pendente';
+                const stMeta = STEP_STATUS_MAP[stStatus];
                 const days = calculateDays(dates?.data_inicio, dates?.data_fim);
 
                 return (
@@ -158,20 +160,13 @@ export default function CompanyScheduleTab({
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={cn(
-                        "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase inline-flex items-center gap-1",
-                        statusColor === 'verde' && "bg-emerald-100 text-emerald-800 border border-emerald-200",
-                        statusColor === 'amarelo' && "bg-amber-100 text-amber-800 border border-amber-200",
-                        statusColor === 'vermelho' && "bg-red-100 text-red-800 border border-red-200",
-                        statusColor === 'pendente' && "bg-slate-100 text-slate-600 border border-slate-200"
+                        "px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase inline-flex items-center gap-1 border",
+                        stMeta?.badgeBg,
+                        stMeta?.badgeText,
+                        stMeta?.badgeBorder
                       )}>
-                        <span className={cn(
-                          "w-1.5 h-1.5 rounded-full",
-                          statusColor === 'verde' && "bg-emerald-500",
-                          statusColor === 'amarelo' && "bg-amber-500",
-                          statusColor === 'vermelho' && "bg-red-500",
-                          statusColor === 'pendente' && "bg-slate-400"
-                        )} />
-                        {statusColor === 'verde' ? 'Concluído' : statusColor === 'amarelo' ? 'Em Andamento' : statusColor === 'vermelho' ? 'Crítico' : 'Pendente'}
+                        <span className={cn("w-1.5 h-1.5 rounded-full", stMeta?.dotBg)} />
+                        {stMeta?.label || stStatus}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">

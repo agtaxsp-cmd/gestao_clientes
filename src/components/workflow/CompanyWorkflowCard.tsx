@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Compass, FileCheck, ShieldCheck, Eye, Calendar, Ban } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum, REGIMES_CONFIG, getRegimeFromSegmento, RegimeEnum } from '../../types';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum, REGIMES_CONFIG, getRegimeFromSegmento, RegimeEnum, EtapaColorStatus } from '../../types';
 import Phase1Stepper from './Phase1Stepper';
 import MonthRoulette from './MonthRoulette';
 import CompanyScheduleTab from './CompanyScheduleTab';
@@ -23,7 +23,7 @@ export interface CompanyWorkflowCardProps {
   onOpenDetail: (client: Client, grupo: FaseGrupoEnum, stepNum: number, month?: number | null) => void;
   onOpenAnalytic: (client: Client) => void;
   onTogglePhaseDisabled?: (client: Client, grupo: 'fase_2' | 'fase_3', disabled: boolean) => void;
-  onUpdateStepStatus?: (client: Client, stepNum: number, newStatus: 'verde' | 'amarelo' | 'vermelho' | 'pendente') => void;
+  onUpdateStepStatus?: (client: Client, stepNum: number, newStatus: EtapaColorStatus) => void;
   onSavePeriodoEscopo?: (client: Client, periodo: string) => void;
 }
 

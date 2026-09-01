@@ -24,7 +24,9 @@ import {
   REGIMES_CONFIG,
   SEGMENTOS_POR_REGIME,
   getRegimeFromSegmento,
-  RegimeEnum
+  RegimeEnum,
+  EtapaColorStatus,
+  normalizeStepStatus
 } from '../types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CompanyWorkflowCard from '../components/workflow/CompanyWorkflowCard';
@@ -61,6 +63,12 @@ export default function FluxoTrabalho() {
   const [detailModalNotes, setDetailModalNotes] = useState<string>('');
   const [detailModalPrincipalId, setDetailModalPrincipalId] = useState<string>('');
   const [detailModalBackupId, setDetailModalBackupId] = useState<string>('');
+  const [detailModalStartDate, setDetailModalStartDate] = useState<string>('');
+  const [detailModalEndDate, setDetailModalEndDate] = useState<string>('');
+  const [detailModalStartAsIs, setDetailModalStartAsIs] = useState<string>('');
+  const [detailModalStartToBe, setDetailModalStartToBe] = useState<string>('');
+  const [detailModalSelectedMemberIds, setDetailModalSelectedMemberIds] = useState<string[]>([]);
+  const [detailModalStatus, setDetailModalStatus] = useState<EtapaColorStatus>('pendente');
   const [savingDetail, setSavingDetail] = useState(false);
 
   // Modal Visão Analítica Completa (Deep Dive)
@@ -162,12 +170,6 @@ export default function FluxoTrabalho() {
     return phases.filter(p => p.grupo_fase === 'fase_3').sort((a, b) => a.ordem - b.ordem);
   }, [phases]);
 
-  // States do Modal de Detalhes (Datas e Múltiplos Responsáveis)
-  const [detailModalStartDate, setDetailModalStartDate] = useState<string>('');
-  const [detailModalEndDate, setDetailModalEndDate] = useState<string>('');
-  const [detailModalStartAsIs, setDetailModalStartAsIs] = useState<string>('');
-  const [detailModalStartToBe, setDetailModalStartToBe] = useState<string>('');
-  const [detailModalSelectedMemberIds, setDetailModalSelectedMemberIds] = useState<string[]>([]);
 
   // Clientes filtrados por Busca, Regime, Segmento e Tipo de Contrato (Apenas Recorrentes)
   const filteredClients = useMemo(() => {
@@ -197,7 +199,8 @@ export default function FluxoTrabalho() {
   // Avançar Etapa na Fase 1 (Diagnóstico)
   const handleAdvanceFase1 = async (client: Client, currentPipe?: WorkflowPipeline) => {
     try {
-      const totalSteps = fasesDiagnostico.length || 7;
+      const clientPhases = getClientPhasesForGroup(client, 'fase_1');
+      const totalSteps = clientPhases.length || 7;
       let pipe = currentPipe;
 
       if (!pipe) {
@@ -208,7 +211,7 @@ export default function FluxoTrabalho() {
             fase_grupo: 'fase_1',
             status: 'em_andamento',
             etapa_atual: 2,
-            mensagem_info: `Em andamento na etapa 2: ${fasesDiagnostico[1]?.nome || ''}`,
+            mensagem_info: `Em andamento na etapa 2: ${clientPhases[1]?.nome || ''}`,
             mes_referencia: null
           })
           .select()
@@ -222,7 +225,7 @@ export default function FluxoTrabalho() {
         const nextStatus: PipelineStatusEnum = isFinished ? 'concluido' : 'em_andamento';
         const nextMsg = isFinished 
           ? 'Diagnóstico finalizado com sucesso!' 
-          : `Em andamento na etapa ${nextStep}: ${fasesDiagnostico[nextStep - 1]?.nome || ''}`;
+          : `Em andamento na etapa ${nextStep}: ${clientPhases[nextStep - 1]?.nome || ''}`;
 
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
@@ -256,9 +259,10 @@ export default function FluxoTrabalho() {
   const handleRegressFase1 = async (client: Client, pipe: WorkflowPipeline) => {
     if (pipe.etapa_atual <= 1 && pipe.status !== 'concluido') return;
     try {
+      const clientPhases = getClientPhasesForGroup(client, 'fase_1');
       const prevStep = pipe.status === 'concluido' ? pipe.etapa_atual : Math.max(1, pipe.etapa_atual - 1);
       const prevStatus: PipelineStatusEnum = prevStep === 1 ? 'iniciado' : 'em_andamento';
-      const prevMsg = `Retornado para a etapa ${prevStep}: ${fasesDiagnostico[prevStep - 1]?.nome || ''}`;
+      const prevMsg = `Retornado para a etapa ${prevStep}: ${clientPhases[prevStep - 1]?.nome || ''}`;
 
       const { error: upErr } = await supabase
         .from('workflow_pipelines')
@@ -428,6 +432,12 @@ export default function FluxoTrabalho() {
     setDetailModalStartToBe(pipe?.start_to_be || '');
     setDetailModalSelectedMemberIds(pipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
 
+    const savedStatus = pipe?.status_etapas?.[stepKey];
+    const initialStatus = savedStatus
+      ? normalizeStepStatus(savedStatus)
+      : (pipe?.status === 'concluido' || (pipe?.etapa_atual || 1) > stepNum ? 'concluido' : (pipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'));
+    setDetailModalStatus(initialStatus);
+
     setDetailModalOpen(true);
   };
 
@@ -462,6 +472,12 @@ export default function FluxoTrabalho() {
     setDetailModalStartDate(stepDates?.data_inicio || '');
     setDetailModalEndDate(stepDates?.data_fim || '');
     setDetailModalSelectedMemberIds(detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
+
+    const savedStatus = detailModalPipe?.status_etapas?.[stepKey];
+    const initialStatus = savedStatus
+      ? normalizeStepStatus(savedStatus)
+      : (detailModalPipe?.status === 'concluido' || (detailModalPipe?.etapa_atual || 1) > stepNum ? 'concluido' : (detailModalPipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'));
+    setDetailModalStatus(initialStatus);
   };
 
   const handleSaveDetail = async () => {
@@ -500,6 +516,9 @@ export default function FluxoTrabalho() {
             start_to_be: detailModalStartToBe || null,
             responsaveis_multiplos_etapas: {
               [stepKey]: detailModalSelectedMemberIds
+            },
+            status_etapas: {
+              [stepKey]: detailModalStatus
             }
           })
           .select()
@@ -538,6 +557,12 @@ export default function FluxoTrabalho() {
           [stepKey]: detailModalSelectedMemberIds
         };
 
+        const currentStatuses = targetPipe.status_etapas || {};
+        const updatedStatuses = {
+          ...currentStatuses,
+          [stepKey]: detailModalStatus
+        };
+
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update({
@@ -548,6 +573,7 @@ export default function FluxoTrabalho() {
             start_as_is: detailModalStartAsIs || null,
             start_to_be: detailModalStartToBe || null,
             responsaveis_multiplos_etapas: updatedMultiples,
+            status_etapas: updatedStatuses,
             caminho_rede: detailModalStepNum === 1 ? detailModalPath : (targetPipe.caminho_rede || detailModalPath),
             updated_at: new Date().toISOString()
           })
@@ -574,8 +600,8 @@ export default function FluxoTrabalho() {
     }
   };
 
-  // Alternar Status Tricolor da Etapa (Verde / Amarelo / Vermelho)
-  const handleUpdateStepStatus = async (client: Client, stepNum: number, newStatus: 'verde' | 'amarelo' | 'vermelho' | 'pendente') => {
+  // Alternar Status Visual da Etapa
+  const handleUpdateStepStatus = async (client: Client, stepNum: number, newStatus: EtapaColorStatus) => {
     try {
       let pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
       const stepKey = String(stepNum);
@@ -897,6 +923,7 @@ export default function FluxoTrabalho() {
           startAsIs={detailModalStartAsIs}
           startToBe={detailModalStartToBe}
           selectedMemberIds={detailModalSelectedMemberIds}
+          stepStatus={detailModalStatus}
           saving={savingDetail}
           onClose={() => setDetailModalOpen(false)}
           onSwitchStep={handleSwitchDetailStep}
@@ -909,6 +936,7 @@ export default function FluxoTrabalho() {
           onStartAsIsChange={setDetailModalStartAsIs}
           onStartToBeChange={setDetailModalStartToBe}
           onSelectedMemberIdsChange={setDetailModalSelectedMemberIds}
+          onStatusChange={setDetailModalStatus}
           onSave={handleSaveDetail}
         />
       )}

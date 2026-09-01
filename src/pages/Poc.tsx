@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, getRegimeFromSegmento, REGIMES_CONFIG } from '../types';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, getRegimeFromSegmento, REGIMES_CONFIG, EtapaColorStatus, normalizeStepStatus, STEP_STATUS_MAP } from '../types';
 import { 
   FlaskConical, 
   Search, 
@@ -17,7 +17,9 @@ import {
   User,
   UserCheck,
   Save,
-  Loader2
+  Loader2,
+  Ban,
+  AlertTriangle
 } from 'lucide-react';
 import { cn, formatCNPJ } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -53,7 +55,7 @@ export default function Poc() {
   const [stepModalNotes, setStepModalNotes] = useState<string>('');
   const [stepModalPrincipalId, setStepModalPrincipalId] = useState<string>('');
   const [stepModalBackupId, setStepModalBackupId] = useState<string>('');
-  const [stepModalStatus, setStepModalStatus] = useState<'cinza' | 'amarelo' | 'verde' | 'vermelho'>('cinza');
+  const [stepModalStatus, setStepModalStatus] = useState<EtapaColorStatus>('pendente');
   const [savingStepDetail, setSavingStepDetail] = useState(false);
 
   const getInitials = (name?: string) => {
@@ -208,8 +210,9 @@ export default function Poc() {
     const isCompleted = client.status_poc === 'convertido' || currentStepNum > stepNum;
     const isCurrent = client.status_poc !== 'convertido' && currentStepNum === stepNum;
 
-    const defaultStatus = isCompleted ? 'verde' : isCurrent ? 'amarelo' : 'cinza';
-    const savedStatus = (pipe?.status_etapas?.[stepKey] as ('cinza' | 'amarelo' | 'verde' | 'vermelho')) || defaultStatus;
+    const defaultStatus: EtapaColorStatus = isCompleted ? 'concluido' : isCurrent ? 'em_andamento' : 'pendente';
+    const rawStatus = pipe?.status_etapas?.[stepKey];
+    const savedStatus: EtapaColorStatus = rawStatus ? normalizeStepStatus(rawStatus) : defaultStatus;
 
     setStepModalStatus(savedStatus);
     setStepModalOpen(true);
@@ -605,26 +608,41 @@ export default function Poc() {
                         const customResp = pipe?.responsaveis_etapas?.[stepKey];
                         const respPrincipalMember = members.find(m => m.id === customResp?.principal_id);
 
+                        const rawStatus = pipe?.status_etapas?.[stepKey];
+                        const stepStatus: EtapaColorStatus = rawStatus
+                          ? normalizeStepStatus(rawStatus)
+                          : (isCompleted ? 'concluido' : isCurrent ? 'em_andamento' : 'pendente');
+
                         return (
                           <button
                             key={f.id || f.key}
                             type="button"
                             onClick={() => openPocStepModal(client, f, stepIndex)}
                             className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-slate-50 transition-all group/step cursor-pointer text-center"
-                            title={`Etapa ${stepIndex}: ${f.nome}`}
+                            title={`Etapa ${stepIndex}: ${f.nome} (${STEP_STATUS_MAP[stepStatus]?.label || stepStatus})`}
                           >
                             <div className={cn(
                               "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-105",
-                              isCompleted && "bg-emerald-500 text-white ring-2 ring-emerald-200",
-                              isCurrent && "bg-amber-500 text-white ring-2 ring-amber-200",
-                              !isCompleted && !isCurrent && "bg-white border-2 border-slate-300 text-slate-500 font-semibold"
+                              stepStatus === 'concluido' && "bg-emerald-500 text-white ring-2 ring-emerald-200",
+                              stepStatus === 'em_andamento' && "bg-amber-500 text-white ring-2 ring-amber-200 font-bold",
+                              stepStatus === 'na' && "bg-slate-200 border-2 border-slate-300 text-slate-500 font-extrabold text-[10px]",
+                              stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-500 font-semibold"
                             )}>
-                              {isCompleted ? <Check className="w-4 h-4 text-white stroke-[3]" /> : stepIndex}
+                              {stepStatus === 'concluido' ? (
+                                <Check className="w-4 h-4 text-white stroke-[3]" />
+                              ) : stepStatus === 'na' ? (
+                                <Ban className="w-4 h-4 text-slate-500" />
+                              ) : (
+                                stepIndex
+                              )}
                             </div>
 
                             <span className={cn(
                               "text-[11px] font-bold leading-tight max-w-[145px]",
-                              isCompleted ? "text-emerald-700" : isCurrent ? "text-amber-800" : "text-slate-600"
+                              stepStatus === 'concluido' && "text-emerald-700",
+                              stepStatus === 'em_andamento' && "text-amber-800",
+                              stepStatus === 'na' && "text-slate-500 line-through",
+                              stepStatus === 'pendente' && "text-slate-600"
                             )}>
                               {f.nome}
                             </span>
@@ -820,38 +838,38 @@ export default function Poc() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
-                  onClick={() => setStepModalStatus('cinza')}
+                  onClick={() => setStepModalStatus('na')}
                   className={cn(
                     "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
-                    stepModalStatus === 'cinza'
-                      ? "bg-slate-800 text-white border-slate-900 shadow-2xs"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    stepModalStatus === 'na'
+                      ? "bg-slate-700 text-white border-slate-800 shadow-2xs"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
                   )}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-                  Pendente
+                  Não se aplica
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setStepModalStatus('amarelo')}
+                  onClick={() => setStepModalStatus('em_andamento')}
                   className={cn(
                     "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
-                    stepModalStatus === 'amarelo'
+                    stepModalStatus === 'em_andamento' || stepModalStatus === 'amarelo'
                       ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
                       : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100"
                   )}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                  Em Andamento
+                  Em andamento
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setStepModalStatus('verde')}
+                  onClick={() => setStepModalStatus('concluido')}
                   className={cn(
                     "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
-                    stepModalStatus === 'verde'
+                    stepModalStatus === 'concluido' || stepModalStatus === 'verde'
                       ? "bg-emerald-600 text-white border-emerald-700 shadow-2xs"
                       : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
                   )}
@@ -862,16 +880,16 @@ export default function Poc() {
 
                 <button
                   type="button"
-                  onClick={() => setStepModalStatus('vermelho')}
+                  onClick={() => setStepModalStatus('pendente')}
                   className={cn(
                     "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
-                    stepModalStatus === 'vermelho'
-                      ? "bg-red-600 text-white border-red-700 shadow-2xs"
-                      : "bg-red-50 border-red-200 text-red-800 hover:bg-red-100"
+                    stepModalStatus === 'pendente' || stepModalStatus === 'cinza'
+                      ? "bg-slate-900 text-white border-slate-950 shadow-2xs"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                   )}
                 >
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                  Bloqueio
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  Pendente
                 </button>
               </div>
             </div>

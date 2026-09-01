@@ -142,7 +142,60 @@ export interface FiscalDocumentMatrix {
 }
 
 export type PipelineStatusEnum = 'iniciado' | 'em_andamento' | 'concluido' | 'bloqueado';
-export type EtapaColorStatus = 'verde' | 'amarelo' | 'vermelho' | 'pendente';
+export type EtapaColorStatus = 'na' | 'em_andamento' | 'concluido' | 'pendente' | 'verde' | 'amarelo' | 'vermelho' | 'cinza';
+
+export interface StepStatusConfig {
+  key: 'na' | 'em_andamento' | 'concluido' | 'pendente';
+  label: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  dotBg: string;
+}
+
+export function normalizeStepStatus(status?: string | null): 'na' | 'em_andamento' | 'concluido' | 'pendente' {
+  if (!status) return 'pendente';
+  if (status === 'na' || status === 'nao_se_aplica') return 'na';
+  if (status === 'em_andamento' || status === 'amarelo') return 'em_andamento';
+  if (status === 'concluido' || status === 'verde') return 'concluido';
+  if (status === 'vermelho') return 'em_andamento';
+  return 'pendente';
+}
+
+export const STEP_STATUS_MAP: Record<'na' | 'em_andamento' | 'concluido' | 'pendente', StepStatusConfig> = {
+  na: {
+    key: 'na',
+    label: 'Não se aplica',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-600',
+    badgeBorder: 'border-slate-300',
+    dotBg: 'bg-slate-400'
+  },
+  em_andamento: {
+    key: 'em_andamento',
+    label: 'Em andamento',
+    badgeBg: 'bg-amber-50',
+    badgeText: 'text-amber-800',
+    badgeBorder: 'border-amber-300',
+    dotBg: 'bg-amber-500'
+  },
+  concluido: {
+    key: 'concluido',
+    label: 'Concluído',
+    badgeBg: 'bg-emerald-50',
+    badgeText: 'text-emerald-800',
+    badgeBorder: 'border-emerald-300',
+    dotBg: 'bg-emerald-500'
+  },
+  pendente: {
+    key: 'pendente',
+    label: 'Pendente',
+    badgeBg: 'bg-slate-100',
+    badgeText: 'text-slate-700',
+    badgeBorder: 'border-slate-200',
+    dotBg: 'bg-slate-400'
+  }
+};
 
 export type FaseGrupoEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'fase_poc';
 export type FaseTabEnum = 'fase_1' | 'fase_2' | 'fase_3' | 'fase_poc' | 'cronograma';

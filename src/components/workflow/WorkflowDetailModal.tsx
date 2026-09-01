@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Folder, Save, User, UserCheck, FileText, Loader2, Calendar } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, FaseGrupoEnum } from '../../types';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, FaseGrupoEnum, EtapaColorStatus } from '../../types';
 import { MESES } from './types';
 import { cn } from '../../lib/utils';
 
@@ -23,6 +23,7 @@ export interface WorkflowDetailModalProps {
   startAsIs?: string;
   startToBe?: string;
   selectedMemberIds?: string[];
+  stepStatus?: EtapaColorStatus;
   saving: boolean;
   onClose: () => void;
   onSwitchStep: (stepNum: number) => void;
@@ -35,6 +36,7 @@ export interface WorkflowDetailModalProps {
   onStartAsIsChange?: (date: string) => void;
   onStartToBeChange?: (date: string) => void;
   onSelectedMemberIdsChange?: (ids: string[]) => void;
+  onStatusChange?: (status: EtapaColorStatus) => void;
   onSave: () => void;
 }
 
@@ -56,6 +58,7 @@ export default function WorkflowDetailModal({
   startAsIs = '',
   startToBe = '',
   selectedMemberIds = [],
+  stepStatus = 'pendente',
   saving,
   onClose,
   onSwitchStep,
@@ -68,6 +71,7 @@ export default function WorkflowDetailModal({
   onStartAsIsChange,
   onStartToBeChange,
   onSelectedMemberIdsChange,
+  onStatusChange,
   onSave
 }: WorkflowDetailModalProps) {
   const monthObj = MESES.find(m => m.id === month);
@@ -122,7 +126,7 @@ export default function WorkflowDetailModal({
             )}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure datas do cronograma, múltiplos responsáveis, pasta de rede e observações para a etapa <strong className="text-slate-800">"{currentPhase?.nome || `Etapa ${stepNum}`}"</strong>.
+            Configure status visual, datas do cronograma, múltiplos responsáveis, pasta de rede e observações para a etapa <strong className="text-slate-800">"{currentPhase?.nome || `Etapa ${stepNum}`}"</strong>.
           </p>
         </div>
 
@@ -200,6 +204,69 @@ export default function WorkflowDetailModal({
         )}
 
         <div className="flex flex-col gap-4">
+          {/* Seção 0: Status Visual da Etapa */}
+          {onStatusChange && (
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-2">
+              <label className="text-xs font-bold text-slate-700">Status Visual da Etapa</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onStatusChange('na')}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
+                    stepStatus === 'na'
+                      ? "bg-slate-700 text-white border-slate-800 shadow-2xs"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  Não se aplica
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onStatusChange('em_andamento')}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
+                    stepStatus === 'em_andamento' || stepStatus === 'amarelo'
+                      ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
+                      : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100"
+                  )}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                  Em andamento
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onStatusChange('concluido')}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
+                    stepStatus === 'concluido' || stepStatus === 'verde'
+                      ? "bg-emerald-600 text-white border-emerald-700 shadow-2xs"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                  )}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                  Concluído
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onStatusChange('pendente')}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all",
+                    stepStatus === 'pendente' || stepStatus === 'cinza'
+                      ? "bg-slate-900 text-white border-slate-950 shadow-2xs"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  )}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  Pendente
+                </button>
+              </div>
+            </div>
+          )}
           {/* Seção 1: Datas da Etapa (Item 1 - Cronograma) */}
           <div className="p-3.5 bg-gradient-to-r from-slate-50 to-indigo-50/20 rounded-xl border border-slate-200 flex flex-col gap-3">
             <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
