@@ -21,6 +21,7 @@ import {
   WorkflowPhase, 
   TeamMember, 
   FaseGrupoEnum,
+  FaseTabEnum,
   REGIMES_CONFIG,
   SEGMENTOS_POR_REGIME,
   getRegimeFromSegmento,
@@ -71,15 +72,18 @@ export default function FluxoTrabalho() {
   const [detailModalStatus, setDetailModalStatus] = useState<EtapaColorStatus>('pendente');
   const [savingDetail, setSavingDetail] = useState(false);
 
+  // Controle de abas ativas por cliente
+  const [clientActiveTabs, setClientActiveTabs] = useState<Record<string, FaseTabEnum>>({});
+
   // Modal Visão Analítica Completa (Deep Dive)
   const [analyticClient, setAnalyticClient] = useState<Client | null>(null);
 
   // ────────────────────────────────────────────────
   // Fetch de dados
   // ────────────────────────────────────────────────
-  const fetchData = async () => {
+  const fetchData = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
 
       // 1. Fases
       const { data: phasesData, error: phaseErr } = await supabase
@@ -123,7 +127,7 @@ export default function FluxoTrabalho() {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Erro ao carregar fluxos de trabalho:', message);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -248,7 +252,7 @@ export default function FluxoTrabalho() {
         usuario_nome: getUserName()
       });
 
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao avançar etapa: ' + message);
@@ -284,7 +288,7 @@ export default function FluxoTrabalho() {
         usuario_nome: getUserName()
       });
 
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao retornar etapa: ' + message);
@@ -361,7 +365,7 @@ export default function FluxoTrabalho() {
         usuario_nome: getUserName()
       });
 
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao atualizar fluxo mensal: ' + message);
@@ -591,7 +595,7 @@ export default function FluxoTrabalho() {
       });
 
       setDetailModalOpen(false);
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao salvar detalhes: ' + message);
@@ -635,7 +639,7 @@ export default function FluxoTrabalho() {
         if (upErr) throw upErr;
       }
 
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       console.error('Erro ao atualizar status da etapa:', err);
     }
@@ -663,7 +667,7 @@ export default function FluxoTrabalho() {
           .eq('id', pipe.id);
         if (upErr) throw upErr;
       }
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       console.error('Erro ao salvar período do escopo:', err);
     }
@@ -685,7 +689,7 @@ export default function FluxoTrabalho() {
 
       if (upErr) throw upErr;
 
-      fetchData();
+      fetchData(true);
     } catch (err: unknown) {
       console.error('Erro ao alternar fase desabilitada:', err);
     }
@@ -888,6 +892,8 @@ export default function FluxoTrabalho() {
                 fasesGovernanca={clientFasesGov}
                 members={members}
                 assignments={assignments}
+                activeTab={clientActiveTabs[client.id]}
+                onTabChange={(tab) => setClientActiveTabs(prev => ({ ...prev, [client.id]: tab }))}
                 onAdvanceFase1={handleAdvanceFase1}
                 onRegressFase1={handleRegressFase1}
                 onAdvanceMonthly={handleAdvanceMonthlyFlow}

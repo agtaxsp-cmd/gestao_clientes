@@ -17,6 +17,8 @@ export interface CompanyWorkflowCardProps {
   fasesGovernanca: WorkflowPhase[];
   members: TeamMember[];
   assignments: WorkflowAssignment[];
+  activeTab?: FaseTabEnum;
+  onTabChange?: (tab: FaseTabEnum) => void;
   onAdvanceFase1: (client: Client, currentPipe?: WorkflowPipeline) => void;
   onRegressFase1: (client: Client, pipe: WorkflowPipeline) => void;
   onAdvanceMonthly: (client: Client, grupo: 'fase_2' | 'fase_3', month: number, year: number) => void;
@@ -36,6 +38,8 @@ export default function CompanyWorkflowCard({
   fasesGovernanca,
   members,
   assignments,
+  activeTab: externalActiveTab,
+  onTabChange,
   onAdvanceFase1,
   onRegressFase1,
   onAdvanceMonthly,
@@ -45,7 +49,13 @@ export default function CompanyWorkflowCard({
   onUpdateStepStatus,
   onSavePeriodoEscopo
 }: CompanyWorkflowCardProps) {
-  const [activeTab, setActiveTab] = useState<FaseTabEnum>('fase_1');
+  const [internalTab, setInternalTab] = useState<FaseTabEnum>('fase_1');
+  const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalTab;
+
+  const handleSelectTab = (tab: FaseTabEnum) => {
+    setInternalTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
 
   const getInitials = (name?: string) => {
     if (!name) return 'CL';
@@ -172,7 +182,7 @@ export default function CompanyWorkflowCard({
       {/* ──────── Seletor de Fases Internas (Abas) ──────── */}
       <div className="flex border-b border-slate-200 bg-slate-50/60 px-5 gap-2 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('fase_1')}
+          onClick={() => handleSelectTab('fase_1')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
             isFase1Disabled && "opacity-60 line-through",
@@ -196,7 +206,7 @@ export default function CompanyWorkflowCard({
         </button>
 
         <button
-          onClick={() => setActiveTab('fase_2')}
+          onClick={() => handleSelectTab('fase_2')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
             isFase2Disabled && "opacity-60 line-through",
@@ -217,7 +227,7 @@ export default function CompanyWorkflowCard({
         </button>
 
         <button
-          onClick={() => setActiveTab('fase_3')}
+          onClick={() => handleSelectTab('fase_3')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
             isFase3Disabled && "opacity-60 line-through",
@@ -239,7 +249,7 @@ export default function CompanyWorkflowCard({
 
         {/* 4ª Aba: CRONOGRAMA */}
         <button
-          onClick={() => setActiveTab('cronograma')}
+          onClick={() => handleSelectTab('cronograma')}
           className={cn(
             "py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer",
             activeTab === 'cronograma'
