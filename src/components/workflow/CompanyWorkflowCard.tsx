@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Compass, FileCheck, ShieldCheck, Eye, Calendar, Ban } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum, REGIMES_CONFIG, getRegimeFromSegmento, RegimeEnum, EtapaColorStatus } from '../../types';
+import { Client, WorkflowPipeline, WorkflowPhase, TeamMember, WorkflowAssignment, FaseGrupoEnum, FaseTabEnum, REGIMES_CONFIG, getRegimeFromSegmento, RegimeEnum, EtapaColorStatus, normalizeStepStatus } from '../../types';
 import Phase1Stepper from './Phase1Stepper';
 import MonthRoulette from './MonthRoulette';
 import CompanyScheduleTab from './CompanyScheduleTab';
@@ -69,9 +69,9 @@ export default function CompanyWorkflowCard({
   const isFase1Concluido = pipeFase1?.status === 'concluido';
   const f1StepNum = pipeFase1?.etapa_atual || 1;
 
-  // Status das etapas (contagem verde)
+  // Status das etapas (contagem concluído)
   const statusEtapas = pipeFase1?.status_etapas || {};
-  const greenCount = Object.values(statusEtapas).filter(s => s === 'verde').length;
+  const greenCount = Object.values(statusEtapas).filter(s => normalizeStepStatus(s) === 'concluido').length;
 
   // Fases Desabilitadas (Não Aplicáveis)
   const fasesDesabilitadas = pipeFase1?.fases_desabilitadas || {};

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Hourglass, ArrowRight, ArrowLeft, User, FileText, Calendar, Edit3, X, AlertTriangle, AlertCircle, Ban } from 'lucide-react';
+import { Check, ArrowRight, ArrowLeft, User, FileText, Calendar, Edit3, X, Ban } from 'lucide-react';
 import { WorkflowPipeline, Client, WorkflowPhase, TeamMember, WorkflowAssignment, EtapaColorStatus, normalizeStepStatus, STEP_STATUS_MAP } from '../../types';
 import { cn } from '../../lib/utils';
 
@@ -25,7 +25,6 @@ export default function Phase1Stepper({
   onAdvance,
   onRegress,
   onOpenDetail,
-  onUpdateStepStatus,
   onSavePeriodoEscopo
 }: Phase1StepperProps) {
   const isFase1Concluido = pipeFase1?.status === 'concluido';
@@ -35,21 +34,6 @@ export default function Phase1Stepper({
 
   const [editingEscopo, setEditingEscopo] = useState(false);
   const [tempEscopo, setTempEscopo] = useState(periodoEscopo);
-
-  // Alternar status da etapa ao clicar no ícone: concluído -> em_andamento -> não se aplica -> pendente -> concluído
-  const handleToggleStatus = (e: React.MouseEvent, stepNum: number) => {
-    e.stopPropagation();
-    if (!onUpdateStepStatus) return;
-    const raw = statusEtapas[String(stepNum)];
-    const current = normalizeStepStatus(raw);
-    let nextStatus: EtapaColorStatus = 'concluido';
-    if (current === 'concluido') nextStatus = 'em_andamento';
-    else if (current === 'em_andamento') nextStatus = 'na';
-    else if (current === 'na') nextStatus = 'pendente';
-    else nextStatus = 'concluido';
-
-    onUpdateStepStatus(stepNum, nextStatus);
-  };
 
   const handleSaveEscopo = () => {
     if (onSavePeriodoEscopo) {
@@ -178,23 +162,25 @@ export default function Phase1Stepper({
                 key={phaseObj.id || phaseObj.key}
                 onClick={() => onOpenDetail(client, 'fase_1', stepNum)}
                 className="flex flex-col items-center gap-1.5 cursor-pointer p-2 rounded-xl hover:bg-slate-50 transition-all group/step"
-                title={`Etapa ${stepNum}: ${phaseObj.nome} (${statusMeta?.label || stepStatus}). Clique no ícone para alternar status.`}
+                title={`Etapa ${stepNum}: ${phaseObj.nome} (${statusMeta?.label || stepStatus})`}
               >
-                {/* Círculo da Etapa (Clique direto altera status) */}
+                {/* Círculo da Etapa */}
                 <div
-                  onClick={(e) => handleToggleStatus(e, stepNum)}
                   className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-110 cursor-pointer",
+                    "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-105",
                     stepStatus === 'concluido' && "bg-emerald-500 text-white ring-2 ring-emerald-200",
-                    stepStatus === 'em_andamento' && "bg-amber-400 text-amber-950 ring-2 ring-amber-200 font-bold",
-                    stepStatus === 'na' && "bg-slate-200 border-2 border-slate-300 text-slate-500 font-bold",
-                    stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-400 font-medium text-xs"
+                    stepStatus === 'em_andamento' && "bg-amber-500 text-white ring-2 ring-amber-200 font-bold",
+                    stepStatus === 'na' && "bg-slate-200 border-2 border-slate-300 text-slate-500 font-extrabold text-[10px]",
+                    stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-500 font-semibold text-xs"
                   )}
                 >
-                  {stepStatus === 'concluido' && <Check className="w-4 h-4 text-white stroke-[3]" />}
-                  {stepStatus === 'em_andamento' && <AlertTriangle className="w-4 h-4 text-amber-950" />}
-                  {stepStatus === 'na' && <Ban className="w-4 h-4 text-slate-500" />}
-                  {stepStatus === 'pendente' && <span className="text-xs font-semibold text-slate-500">{stepNum}</span>}
+                  {stepStatus === 'concluido' ? (
+                    <Check className="w-4 h-4 text-white stroke-[3]" />
+                  ) : stepStatus === 'na' ? (
+                    <Ban className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    stepNum
+                  )}
                 </div>
 
                 {/* Nome da Etapa */}
