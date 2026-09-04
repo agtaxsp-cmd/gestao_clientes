@@ -136,7 +136,7 @@ export default function ControleOutorga() {
   const outorgaRows = useMemo<OutorgaRow[]>(() => {
     return clients.map(client => {
       const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
-      const stepKey = activeTab === 'sped' ? '1' : '2';
+      const stepKey = activeTab === 'sped' ? '1' : '3';
       const stepDates = pipe?.datas_etapas?.[stepKey];
       const dataLiberacao = stepDates?.data_inicio || '';
       const dataValidade = stepDates?.data_fim || '';
@@ -300,7 +300,7 @@ function getErrorMessage(err: unknown): string {
     try {
       setSavingEdit(true);
       const { client } = editingRow;
-      const stepKey = activeTab === 'sped' ? '1' : '2';
+      const stepKey = activeTab === 'sped' ? '1' : '3';
 
       // 1. Buscar a versão mais recente do pipeline Fase 1 diretamente do banco de dados
       const { data: existingPipes, error: fetchErr } = await supabase
@@ -383,7 +383,7 @@ function getErrorMessage(err: unknown): string {
 
   // Navegar direto para o Cliente Recorrente na Fase 1
   const handleNavigateToWorkflow = (clientId: string) => {
-    const stepNum = activeTab === 'apuracao' ? 2 : 1;
+    const stepNum = activeTab === 'apuracao' ? 3 : 1;
     navigate('/fluxo-de-trabalho', {
       state: {
         clientId,
@@ -504,7 +504,7 @@ function getErrorMessage(err: unknown): string {
               )}
             >
               <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>Outorga Apuração Assistida (Etapa 2)</span>
+              <span>Outorga Apuração Assistida (Etapa 3)</span>
             </button>
           </div>
 
@@ -532,18 +532,18 @@ function getErrorMessage(err: unknown): string {
               </span>
             ) : (
               <span className="bg-purple-600 text-white px-2 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider">
-                ROXO — ETAPA 2
+                ROXO — ETAPA 3
               </span>
             )}
             <span>
               {activeTab === 'sped'
                 ? 'Você está visualizando e editando as outorgas da Etapa 1: OUTORGA SPED.'
-                : 'Você está visualizando e editando as outorgas da Etapa 2: OUTORGA APURAÇÃO ASSISTIDA.'}
+                : 'Você está visualizando e editando as outorgas da Etapa 3: OUTORGA APURAÇÃO ASSISTIDA.'}
             </span>
           </div>
 
           <span className="text-[11px] font-semibold opacity-75 hidden sm:inline">
-            {activeTab === 'sped' ? 'Etapa 1 de Diagnóstico' : 'Etapa 2 de Diagnóstico'}
+            {activeTab === 'sped' ? 'Etapa 1 de Diagnóstico' : 'Etapa 3 de Diagnóstico'}
           </span>
         </div>
 
@@ -838,7 +838,7 @@ function getErrorMessage(err: unknown): string {
                   : "bg-purple-50 text-purple-800 border-purple-200"
               )}>
                 {activeTab === 'sped' ? <FileCheck className="w-4 h-4 text-indigo-600" /> : <ShieldCheck className="w-4 h-4 text-purple-600" />}
-                <span>PREENCHENDO: {activeTab === 'sped' ? 'OUTORGA SPED (ETAPA 1)' : 'OUTORGA APURAÇÃO ASSISTIDA (ETAPA 2)'}</span>
+                <span>PREENCHENDO: {activeTab === 'sped' ? 'OUTORGA SPED (ETAPA 1)' : 'OUTORGA APURAÇÃO ASSISTIDA (ETAPA 3)'}</span>
               </div>
               <h3 className="text-base font-bold text-slate-900 mt-2.5 truncate">
                 {editingRow.client.razao_social}
