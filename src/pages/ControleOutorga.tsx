@@ -476,32 +476,34 @@ function getErrorMessage(err: unknown): string {
 
       {/* Abas e Filtros de Pesquisa */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col gap-4">
-        {/* Abas para seleção do tipo de Outorga */}
+        {/* Abas para seleção do tipo de Outorga com Cores Distintas (Evitar Confusão) */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl">
+          <div className="flex items-center gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/60">
+            {/* Aba Outorga SPED (Tema Indigo / Azul) */}
             <button
               onClick={() => setActiveTab('sped')}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
+                "px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer",
                 activeTab === 'sped'
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-indigo-600 text-white shadow-md border border-indigo-700 ring-2 ring-indigo-200 scale-[1.02]"
+                  : "bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
               )}
             >
-              <FileCheck className="w-4 h-4" />
+              <FileCheck className="w-4 h-4 shrink-0" />
               <span>Outorga SPED (Etapa 1)</span>
             </button>
 
+            {/* Aba Outorga Apuração Assistida (Tema Roxo / Purple) */}
             <button
               onClick={() => setActiveTab('apuracao')}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
+                "px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer",
                 activeTab === 'apuracao'
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-purple-600 text-white shadow-md border border-purple-700 ring-2 ring-purple-200 scale-[1.02]"
+                  : "bg-purple-50/70 text-purple-700 hover:bg-purple-100 border border-purple-200"
               )}
             >
-              <ShieldCheck className="w-4 h-4" />
+              <ShieldCheck className="w-4 h-4 shrink-0" />
               <span>Outorga Apuração Assistida (Etapa 2)</span>
             </button>
           </div>
@@ -514,6 +516,35 @@ function getErrorMessage(err: unknown): string {
               Exibindo <strong className="text-slate-800">{filteredAndSortedRows.length}</strong> de {outorgaRows.length} empresas
             </span>
           </div>
+        </div>
+
+        {/* Banner de Alerta Visual da Aba Ativa para evitar erros no preenchimento */}
+        <div className={cn(
+          "px-4 py-2.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all shadow-2xs",
+          activeTab === 'sped'
+            ? "bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border-indigo-200 text-indigo-900"
+            : "bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50 border-purple-200 text-purple-900"
+        )}>
+          <div className="flex items-center gap-2">
+            {activeTab === 'sped' ? (
+              <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider">
+                AZUL — ETAPA 1
+              </span>
+            ) : (
+              <span className="bg-purple-600 text-white px-2 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider">
+                ROXO — ETAPA 2
+              </span>
+            )}
+            <span>
+              {activeTab === 'sped'
+                ? 'Você está visualizando e editando as outorgas da Etapa 1: OUTORGA SPED.'
+                : 'Você está visualizando e editando as outorgas da Etapa 2: OUTORGA APURAÇÃO ASSISTIDA.'}
+            </span>
+          </div>
+
+          <span className="text-[11px] font-semibold opacity-75 hidden sm:inline">
+            {activeTab === 'sped' ? 'Etapa 1 de Diagnóstico' : 'Etapa 2 de Diagnóstico'}
+          </span>
         </div>
 
         {/* Linha de Busca e Filtros */}
@@ -785,10 +816,13 @@ function getErrorMessage(err: unknown): string {
         )}
       </div>
 
-      {/* Modal de Edição de Outorga */}
+      {/* Modal de Edição de Outorga com Cores Dinâmicas segundo a Aba Ativa */}
       {editingRow && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-200 relative flex flex-col gap-5">
+          <div className={cn(
+            "bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border relative flex flex-col gap-5 border-t-4",
+            activeTab === 'sped' ? "border-indigo-600 border-x-slate-200 border-b-slate-200" : "border-purple-600 border-x-slate-200 border-b-slate-200"
+          )}>
             <button
               onClick={() => setEditingRow(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -797,11 +831,16 @@ function getErrorMessage(err: unknown): string {
             </button>
 
             <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100 w-fit">
-                <Award className="w-3.5 h-3.5" />
-                <span>Outorga: {activeTab === 'sped' ? 'SPED (Etapa 1)' : 'Apuração Assistida (Etapa 2)'}</span>
+              <div className={cn(
+                "flex items-center gap-2 text-xs font-extrabold px-3 py-1 rounded-lg border w-fit shadow-2xs",
+                activeTab === 'sped'
+                  ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                  : "bg-purple-50 text-purple-800 border-purple-200"
+              )}>
+                {activeTab === 'sped' ? <FileCheck className="w-4 h-4 text-indigo-600" /> : <ShieldCheck className="w-4 h-4 text-purple-600" />}
+                <span>PREENCHENDO: {activeTab === 'sped' ? 'OUTORGA SPED (ETAPA 1)' : 'OUTORGA APURAÇÃO ASSISTIDA (ETAPA 2)'}</span>
               </div>
-              <h3 className="text-base font-bold text-slate-900 mt-2 truncate">
+              <h3 className="text-base font-bold text-slate-900 mt-2.5 truncate">
                 {editingRow.client.razao_social}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -816,7 +855,10 @@ function getErrorMessage(err: unknown): string {
                   type="date"
                   value={editLiberacao}
                   onChange={(e) => setEditLiberacao(e.target.value)}
-                  className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                  className={cn(
+                    "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs text-slate-800 outline-none transition-all",
+                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                  )}
                 />
               </div>
 
@@ -826,7 +868,10 @@ function getErrorMessage(err: unknown): string {
                   type="date"
                   value={editValidade}
                   onChange={(e) => setEditValidade(e.target.value)}
-                  className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                  className={cn(
+                    "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs text-slate-800 outline-none transition-all",
+                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                  )}
                 />
               </div>
 
@@ -835,7 +880,10 @@ function getErrorMessage(err: unknown): string {
                 <select
                   value={editStatusEtapa}
                   onChange={(e) => setEditStatusEtapa(e.target.value as EtapaColorStatus)}
-                  className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
+                  className={cn(
+                    "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 outline-none cursor-pointer",
+                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500" : "border-slate-200 focus:bg-white focus:border-purple-500"
+                  )}
                 >
                   <option value="pendente">Pendente</option>
                   <option value="em_andamento">Em Andamento</option>
@@ -855,7 +903,10 @@ function getErrorMessage(err: unknown): string {
               <button
                 onClick={handleSaveEdit}
                 disabled={savingEdit}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-semibold text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50",
+                  activeTab === 'sped' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-purple-600 hover:bg-purple-700"
+                )}
               >
                 {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 <span>Salvar Outorga</span>
