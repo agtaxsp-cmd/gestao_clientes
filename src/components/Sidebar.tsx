@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FlaskConical, ClipboardCheck, GitMerge, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, FlaskConical, ClipboardCheck, GitMerge, Award, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ export default function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
     { name: 'Checklist', path: '/checklist', icon: ClipboardCheck },
     { name: 'POC', path: '/poc', icon: FlaskConical },
     { name: 'Cliente Recorrente', path: '/fluxo-de-trabalho', icon: GitMerge },
+    { name: 'Controle Outorga', path: '/controle-outorga', icon: Award },
     { name: 'Configurações', path: '/configuracoes', icon: Settings },
   ];
 

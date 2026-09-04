@@ -8,6 +8,7 @@ import Clientes from './pages/Clientes';
 import Poc from './pages/Poc';
 import Checklist from './pages/Checklist';
 import FluxoTrabalho from './pages/FluxoTrabalho';
+import ControleOutorga from './pages/ControleOutorga';
 import Configuracoes from './pages/Configuracoes';
 import Login from './pages/Login';
 import { cn } from './lib/utils';
@@ -54,6 +55,7 @@ function MainLayout() {
             <Route path="/checklist" element={<Checklist />} />
             <Route path="/fluxo-de-trabalho" element={<FluxoTrabalho />} />
             <Route path="/fluxo-trabalho" element={<Navigate to="/fluxo-de-trabalho" replace />} />
+            <Route path="/controle-outorga" element={<ControleOutorga />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
