@@ -284,6 +284,23 @@ export default function ControleOutorga() {
     setEditStatusEtapa(row.statusEtapa || 'pendente');
   };
 
+function getErrorMessage(err: unknown): string {
+  if (!err) return 'Erro desconhecido';
+  if (typeof err === 'string') return err;
+  if (typeof err === 'object' && err !== null) {
+    const e = err as Record<string, any>;
+    if (typeof e.message === 'string' && e.message) return e.message;
+    if (typeof e.details === 'string' && e.details) return e.details;
+    if (typeof e.error_description === 'string' && e.error_description) return e.error_description;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
   // ────────────────────────────────────────────────
   // Salvar Edição no Supabase (workflow_pipelines)
   // ────────────────────────────────────────────────
@@ -291,11 +308,22 @@ export default function ControleOutorga() {
     if (!editingRow) return;
     try {
       setSavingEdit(true);
-      const { client, pipeline } = editingRow;
+      const { client } = editingRow;
       const stepKey = activeTab === 'sped' ? '1' : activeTab === 'apuracao' ? '2' : '1';
 
-      const currentDates = pipeline?.datas_etapas || {};
-      const currentStatuses = pipeline?.status_etapas || {};
+      // 1. Buscar a versão mais recente do pipeline Fase 1 diretamente do banco de dados
+      const { data: existingPipes, error: fetchErr } = await supabase
+        .from('workflow_pipelines')
+        .select('*')
+        .eq('client_id', client.id)
+        .eq('fase_grupo', 'fase_1');
+
+      if (fetchErr) throw fetchErr;
+
+      const targetPipe = existingPipes && existingPipes.length > 0 ? existingPipes[0] : null;
+
+      const currentDates = targetPipe?.datas_etapas || {};
+      const currentStatuses = targetPipe?.status_etapas || {};
 
       const updatedDates = {
         ...currentDates,
@@ -310,7 +338,7 @@ export default function ControleOutorga() {
         [stepKey]: editStatusEtapa
       };
 
-      if (pipeline) {
+      if (targetPipe) {
         // Atualizar pipeline existente
         const updatePayload: Record<string, any> = {
           datas_etapas: updatedDates,
@@ -325,7 +353,7 @@ export default function ControleOutorga() {
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update(updatePayload)
-          .eq('id', pipeline.id);
+          .eq('id', targetPipe.id);
 
         if (upErr) throw upErr;
       } else {
@@ -360,9 +388,10 @@ export default function ControleOutorga() {
       });
 
       setEditingRow(null);
-      fetchData(true);
+      await fetchData(true);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = getErrorMessage(err);
+      console.error('Erro ao salvar informações de Outorga:', err);
       alert('Erro ao salvar informações de Outorga: ' + message);
     } finally {
       setSavingEdit(false);
