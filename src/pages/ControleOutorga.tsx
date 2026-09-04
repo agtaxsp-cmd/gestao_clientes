@@ -29,7 +29,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Client, WorkflowPipeline, REGIMES_CONFIG, getRegimeFromSegmento, EtapaColorStatus, normalizeStepStatus } from '../types';
 import { cn, formatCNPJ } from '../lib/utils';
 
-export type OutorgaTabType = 'sped' | 'apuracao' | 'as_is';
+export type OutorgaTabType = 'sped' | 'apuracao';
 export type SortFieldType = 'situacao' | 'razao_social' | 'dataLiberacao' | 'dataValidade' | 'diasVencimento';
 export type SortDirectionType = 'asc' | 'desc';
 
@@ -136,19 +136,10 @@ export default function ControleOutorga() {
   const outorgaRows = useMemo<OutorgaRow[]>(() => {
     return clients.map(client => {
       const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
-      const stepKey = activeTab === 'sped' ? '1' : activeTab === 'apuracao' ? '2' : '1';
-
-      let dataLiberacao = '';
-      let dataValidade = '';
-
-      if (activeTab === 'as_is') {
-        dataLiberacao = pipe?.start_as_is || '';
-        dataValidade = pipe?.datas_etapas?.['1']?.data_fim || '';
-      } else {
-        const stepDates = pipe?.datas_etapas?.[stepKey];
-        dataLiberacao = stepDates?.data_inicio || '';
-        dataValidade = stepDates?.data_fim || '';
-      }
+      const stepKey = activeTab === 'sped' ? '1' : '2';
+      const stepDates = pipe?.datas_etapas?.[stepKey];
+      const dataLiberacao = stepDates?.data_inicio || '';
+      const dataValidade = stepDates?.data_fim || '';
 
       const rawStatus = pipe?.status_etapas?.[stepKey];
       const statusEtapa = normalizeStepStatus(rawStatus);
@@ -309,7 +300,7 @@ function getErrorMessage(err: unknown): string {
     try {
       setSavingEdit(true);
       const { client } = editingRow;
-      const stepKey = activeTab === 'sped' ? '1' : activeTab === 'apuracao' ? '2' : '1';
+      const stepKey = activeTab === 'sped' ? '1' : '2';
 
       // 1. Buscar a versão mais recente do pipeline Fase 1 diretamente do banco de dados
       const { data: existingPipes, error: fetchErr } = await supabase
@@ -346,10 +337,6 @@ function getErrorMessage(err: unknown): string {
           updated_at: new Date().toISOString()
         };
 
-        if (activeTab === 'as_is') {
-          updatePayload.start_as_is = editLiberacao || null;
-        }
-
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update(updatePayload)
@@ -367,10 +354,6 @@ function getErrorMessage(err: unknown): string {
           status_etapas: updatedStatuses,
           mensagem_info: 'Pipeline iniciado pelo Controle de Outorga'
         };
-
-        if (activeTab === 'as_is') {
-          insertPayload.start_as_is = editLiberacao || null;
-        }
 
         const { error: insErr } = await supabase
           .from('workflow_pipelines')
@@ -520,19 +503,6 @@ function getErrorMessage(err: unknown): string {
             >
               <ShieldCheck className="w-4 h-4" />
               <span>Outorga Apuração Assistida (Etapa 2)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('as_is')}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
-                activeTab === 'as_is'
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Confirmação Start AS-IS</span>
             </button>
           </div>
 
@@ -829,7 +799,7 @@ function getErrorMessage(err: unknown): string {
             <div>
               <div className="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100 w-fit">
                 <Award className="w-3.5 h-3.5" />
-                <span>Outorga: {activeTab === 'sped' ? 'SPED (Etapa 1)' : activeTab === 'apuracao' ? 'Apuração Assistida (Etapa 2)' : 'Start AS-IS'}</span>
+                <span>Outorga: {activeTab === 'sped' ? 'SPED (Etapa 1)' : 'Apuração Assistida (Etapa 2)'}</span>
               </div>
               <h3 className="text-base font-bold text-slate-900 mt-2 truncate">
                 {editingRow.client.razao_social}
