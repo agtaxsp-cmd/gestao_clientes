@@ -7,6 +7,8 @@ import {
   CheckCircle2, 
   Clock, 
   ChevronRight, 
+  ChevronLeft,
+  RotateCcw,
   Sparkles, 
   Check, 
   X, 
@@ -142,23 +144,48 @@ export default function Poc() {
   // Avançar etapa da POC
   const handleAdvancePocStep = async (client: Client) => {
     try {
+      const regime = client.regime || getRegimeFromSegmento(client.segmento);
+      const clientPocPhases = pocPhases.filter(p => !p.regime || p.regime === 'geral' || p.regime === regime);
+      const activePhases = clientPocPhases.length > 0 ? clientPocPhases : [
+        { id: '1', key: 'poc_coleta_amostra', nome: 'COLETA DE AMOSTRA / ACESSO', ordem: 1, grupo_fase: 'fase_poc' as const },
+        { id: '2', key: 'poc_processamento', nome: 'AUDITORIA DA AMOSTRA (AS-IS)', ordem: 2, grupo_fase: 'fase_poc' as const },
+        { id: '3', key: 'poc_apresentacao', nome: 'APRESENTAÇÃO DO DIAGNÓSTICO', ordem: 3, grupo_fase: 'fase_poc' as const }
+      ];
+      const totalSteps = activePhases.length;
+
       const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_poc');
-      const currentStep = pipe?.etapa_atual || 0;
-      const totalSteps = pocPhases.length || 3;
-      const nextStep = currentStep >= totalSteps ? totalSteps : currentStep + 1;
-      const isCompleted = nextStep >= totalSteps;
+      const currentStep = pipe?.etapa_atual || 1;
+
+      let nextStep: number;
+      let isCompleted: boolean;
 
       if (!pipe) {
+        if (totalSteps <= 1) {
+          nextStep = 1;
+          isCompleted = true;
+        } else {
+          nextStep = 2;
+          isCompleted = false;
+        }
+
         const { error: insErr } = await supabase
           .from('workflow_pipelines')
           .insert({
             client_id: client.id,
             fase_grupo: 'fase_poc',
-            etapa_atual: 1,
-            status: 'em_andamento'
+            etapa_atual: nextStep,
+            status: isCompleted ? 'concluido' : 'em_andamento'
           });
         if (insErr) throw insErr;
       } else {
+        if (currentStep >= totalSteps) {
+          nextStep = totalSteps;
+          isCompleted = true;
+        } else {
+          nextStep = currentStep + 1;
+          isCompleted = false;
+        }
+
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update({
@@ -171,9 +198,11 @@ export default function Poc() {
       }
 
       await logActivity({
-        titulo: 'Etapa da POC Avançada',
-        descricao: `Avançado para a etapa ${nextStep} da POC da empresa ${client.razao_social}`,
-        tipo_log: 'info',
+        titulo: isCompleted ? 'POC Concluída' : 'Etapa da POC Avançada',
+        descricao: isCompleted 
+          ? `POC da empresa ${client.razao_social} foi concluída com sucesso (${totalSteps}/${totalSteps} etapas)`
+          : `Avançado para a etapa ${nextStep} da POC da empresa ${client.razao_social}`,
+        tipo_log: isCompleted ? 'success' : 'info',
         client_id: client.id,
         usuario_nome: getUserName()
       });
@@ -182,6 +211,43 @@ export default function Poc() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Erro ao avançar etapa da POC: ' + message);
+    }
+  };
+
+  // Voltar etapa da POC (ou Reabrir se já concluída)
+  const handleRegressPocStep = async (client: Client) => {
+    try {
+      const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_poc');
+      if (!pipe) return;
+
+      const currentStep = pipe.etapa_atual || 1;
+      const isCompleted = pipe.status === 'concluido';
+      const nextStep = isCompleted ? currentStep : Math.max(1, currentStep - 1);
+
+      const { error: upErr } = await supabase
+        .from('workflow_pipelines')
+        .update({
+          etapa_atual: nextStep,
+          status: 'em_andamento',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', pipe.id);
+      if (upErr) throw upErr;
+
+      await logActivity({
+        titulo: isCompleted ? 'POC Reaberta' : 'Etapa da POC Retrocedida',
+        descricao: isCompleted 
+          ? `POC da empresa ${client.razao_social} foi reaberta`
+          : `Retrocedido para a etapa ${nextStep} da POC da empresa ${client.razao_social}`,
+        tipo_log: 'info',
+        client_id: client.id,
+        usuario_nome: getUserName()
+      });
+
+      fetchData();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Erro ao retroceder etapa da POC: ' + message);
     }
   };
 
@@ -552,13 +618,41 @@ export default function Poc() {
                     </div>
 
                     {!isPocDone && (
+                      <div className="flex items-center gap-2">
+                        {currentStepNum > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRegressPocStep(client)}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200 flex items-center gap-1"
+                            title="Voltar Etapa Anterior"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                            <span>Voltar</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleAdvancePocStep(client)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 text-white",
+                            currentStepNum >= activePhases.length ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"
+                          )}
+                        >
+                          <span>{currentStepNum >= activePhases.length ? 'Concluir POC' : 'Avançar Etapa'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {isPocDone && !isPocConverted && (
                       <button
                         type="button"
-                        onClick={() => handleAdvancePocStep(client)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+                        onClick={() => handleRegressPocStep(client)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+                        title="Reabrir POC para edição"
                       >
-                        Avançar Etapa
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Reabrir POC</span>
                       </button>
                     )}
 
