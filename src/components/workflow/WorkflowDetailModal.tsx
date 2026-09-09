@@ -294,29 +294,6 @@ export default function WorkflowDetailModal({
                 />
               </div>
             </div>
-
-            {grupo === 'fase_1' && (
-              <div className="pt-2 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-indigo-900 block mb-1">Apresentação AS-IS</label>
-                  <input
-                    type="date"
-                    value={startAsIs}
-                    onChange={(e) => onStartAsIsChange && onStartAsIsChange(e.target.value)}
-                    className="w-full h-9 px-2.5 bg-white border border-indigo-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-purple-900 block mb-1">Apresentação TO-BE</label>
-                  <input
-                    type="date"
-                    value={startToBe}
-                    onChange={(e) => onStartToBeChange && onStartToBeChange(e.target.value)}
-                    className="w-full h-9 px-2.5 bg-white border border-purple-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-purple-100 outline-none cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Seção 2: Múltiplos Responsáveis (Item 4) */}
