@@ -35,6 +35,21 @@ interface TeamMemberWorkload {
   etapasEmAndamento: number;
 }
 
+function calculateDaysToExpiration(validadeStr?: string | null): number | null {
+  if (!validadeStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [year, month, day] = validadeStr.split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  const targetDate = new Date(year, month - 1, day);
+  targetDate.setHours(0, 0, 0, 0);
+
+  const diffTime = targetDate.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
 function AnimatedCounter({ end, duration = 1000 }: { end: number, duration?: number }) {
   const [count, setCount] = useState(0);
 
@@ -76,9 +91,10 @@ export default function Dashboard() {
     fase2EmAndamentoAno: 0,
     fase3ConcluidosAno: 0,
     fase3EmAndamentoAno: 0,
-    matrixConforme: 0,
-    matrixPendente: 0,
-    matrixCritico: 0,
+    outorgasAtivas: 0,
+    outorgasVencendo: 0,
+    outorgasExpiradas: 0,
+    outorgasPendentes: 0,
     totalPocs: 0,
     pocsEmAndamento: 0,
     pocsConvertidas: 0,
@@ -138,17 +154,7 @@ export default function Dashboard() {
         servico: difCount
       });
 
-      // 2. Matriz de Documentos Fiscais (Origem: Tabela `fiscal_documents_matrix`)
-      const { data: matrixData, error: errM } = await supabase
-        .from('fiscal_documents_matrix')
-        .select('client_id, ano_base, mes_base, status_geral');
-      if (errM) throw errM;
-
-      const conformeCount = matrixData?.filter(m => m.status_geral === 'completo').length || 0;
-      const pendentesCount = matrixData?.filter(m => m.status_geral === 'pendente').length || 0;
-      const criticosCount = matrixData?.filter(m => m.status_geral === 'atraso').length || 0;
-
-      // 3. Fases e Atribuições (Origem: Tabelas `workflow_phases` e `workflow_assignments`)
+      // 2. Fases e Atribuições (Origem: Tabelas `workflow_phases` e `workflow_assignments`)
       const { data: phasesData } = await supabase
         .from('workflow_phases')
         .select('*')
@@ -163,7 +169,7 @@ export default function Dashboard() {
         defaultAssignMap[a.fase_fluxo] = a;
       });
 
-      // 4. Pipelines do Fluxo de Trabalho (Origem: Tabela `workflow_pipelines`)
+      // 3. Pipelines do Fluxo de Trabalho (Origem: Tabela `workflow_pipelines`)
       const { data: pipelinesData, error: errP } = await supabase
         .from('workflow_pipelines')
         .select('*');
@@ -178,6 +184,32 @@ export default function Dashboard() {
       const f3Done = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'concluido').length || 0;
       const f3InProgress = pipelinesData?.filter(p => recurringClientIds.has(p.client_id) && p.fase_grupo === 'fase_3' && p.ano_referencia === currentYear && p.status === 'em_andamento').length || 0;
 
+      // 4. Controle de Outorgas (Origem: Tabela `workflow_pipelines` - Fase 1)
+      let outorgasAtivasCount = 0;
+      let outorgasVencendoCount = 0;
+      let outorgasExpiradasCount = 0;
+      let outorgasPendentesCount = 0;
+
+      recurringClients.forEach(c => {
+        const pipe = (pipelinesData || []).find(p => p.client_id === c.id && p.fase_grupo === 'fase_1');
+        const spedValidade = pipe?.datas_etapas?.['1']?.data_fim;
+        const apuracaoValidade = pipe?.datas_etapas?.['3']?.data_fim || pipe?.datas_etapas?.['2']?.data_fim;
+
+        [spedValidade, apuracaoValidade].forEach(valStr => {
+          const dias = calculateDaysToExpiration(valStr);
+          if (dias === null) {
+            outorgasPendentesCount++;
+          } else if (dias < 0) {
+            outorgasExpiradasCount++;
+          } else {
+            outorgasAtivasCount++;
+            if (dias <= 30) {
+              outorgasVencendoCount++;
+            }
+          }
+        });
+      });
+
       setStats({
         totalClients: totalClientsCount,
         totalRaizCnpj: totalRaizCount,
@@ -187,9 +219,10 @@ export default function Dashboard() {
         fase2EmAndamentoAno: f2InProgress,
         fase3ConcluidosAno: f3Done,
         fase3EmAndamentoAno: f3InProgress,
-        matrixConforme: conformeCount,
-        matrixPendente: pendentesCount,
-        matrixCritico: criticosCount,
+        outorgasAtivas: outorgasAtivasCount,
+        outorgasVencendo: outorgasVencendoCount,
+        outorgasExpiradas: outorgasExpiradasCount,
+        outorgasPendentes: outorgasPendentesCount,
         totalPocs: totalPocsCount,
         pocsEmAndamento: pocsEmAndamentoCount,
         pocsConvertidas: pocsConvertidasCount,
@@ -663,47 +696,53 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Painel do Checklist Fiscal */}
+        {/* Painel do Controle de Outorgas */}
         <div className="bg-white rounded-2xl p-6 shadow-2xs border border-slate-200 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  Checklist Fiscal — Matriz de Documentos
+                  <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                  Controle de Outorgas — Status de Procurações
                 </h3>
                 <p className="text-xs text-slate-500 font-mono mt-0.5">
-                  Origem dos Dados: <strong className="text-slate-700 font-semibold">fiscal_documents_matrix</strong>
+                  Origem dos Dados: <strong className="text-slate-700 font-semibold">workflow_pipelines (Fase 1)</strong>
                 </p>
               </div>
-              <Link to="/checklist" className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+              <Link to="/controle-outorga" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
                 Acessar <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mt-2">
-              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col items-center justify-center text-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600 mb-1" />
-                <span className="text-2xl font-bold text-emerald-900">{stats.matrixConforme}</span>
-                <span className="text-[11px] font-semibold text-emerald-700">Conformes</span>
+            <div className="grid grid-cols-4 gap-2.5 mt-2">
+              <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col items-center justify-center text-center">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 mb-1" />
+                <span className="text-2xl font-bold text-emerald-900">{stats.outorgasAtivas}</span>
+                <span className="text-[11px] font-semibold text-emerald-700">Vigentes</span>
               </div>
 
-              <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 flex flex-col items-center justify-center text-center">
-                <Clock className="w-6 h-6 text-amber-600 mb-1" />
-                <span className="text-2xl font-bold text-amber-900">{stats.matrixPendente}</span>
-                <span className="text-[11px] font-semibold text-amber-700">Pendentes</span>
+              <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200 flex flex-col items-center justify-center text-center">
+                <Clock className="w-5 h-5 text-amber-600 mb-1" />
+                <span className="text-2xl font-bold text-amber-900">{stats.outorgasVencendo}</span>
+                <span className="text-[11px] font-semibold text-amber-700">Próx. 30 dias</span>
               </div>
 
-              <div className="p-4 rounded-xl bg-red-50/60 border border-red-200 flex flex-col items-center justify-center text-center">
-                <AlertCircle className="w-6 h-6 text-red-600 mb-1" />
-                <span className="text-2xl font-bold text-red-900">{stats.matrixCritico}</span>
-                <span className="text-[11px] font-semibold text-red-700">Em Atraso</span>
+              <div className="p-3.5 rounded-xl bg-red-50/60 border border-red-200 flex flex-col items-center justify-center text-center">
+                <AlertCircle className="w-5 h-5 text-red-600 mb-1" />
+                <span className="text-2xl font-bold text-red-900">{stats.outorgasExpiradas}</span>
+                <span className="text-[11px] font-semibold text-red-700">Expiradas</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-center">
+                <FileText className="w-5 h-5 text-slate-500 mb-1" />
+                <span className="text-2xl font-bold text-slate-800">{stats.outorgasPendentes}</span>
+                <span className="text-[11px] font-semibold text-slate-600">Sem Data</span>
               </div>
             </div>
 
             <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
               <p>
-                Documentos monitorados: <strong>EFD ICMS/IPI, EFD PIS/COFINS, SPED ECD, SPED ECF, XML NF-e, XML CT-e, XML NFS-e</strong>.
+                Procurações monitoradas: <strong>Outorga SPED (e-CAC)</strong> e <strong>Outorga Apuração Assistida (DTE/Receita)</strong>.
               </p>
             </div>
           </div>
