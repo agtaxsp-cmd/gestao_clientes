@@ -1,27 +1,25 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Award, 
-  Search, 
-  Filter, 
-  Calendar, 
-  Building2, 
-  CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
-  Clock, 
-  Edit3, 
-  Save, 
-  X, 
-  ExternalLink, 
-  RefreshCw, 
+import {
+  Award,
+  Search,
+  Filter,
+  Building2,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Edit3,
+  Save,
+  X,
+  ExternalLink,
   Loader2,
   FileCheck,
   ShieldCheck,
   Tag,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Slash
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/logger';
@@ -29,25 +27,26 @@ import { useAuth } from '../contexts/AuthContext';
 import { Client, WorkflowPipeline, REGIMES_CONFIG, getRegimeFromSegmento, EtapaColorStatus, normalizeStepStatus } from '../types';
 import { cn, formatCNPJ } from '../lib/utils';
 
-export type OutorgaTabType = 'sped' | 'apuracao';
-export type SortFieldType = 'situacao' | 'razao_social' | 'dataLiberacao' | 'dataValidade' | 'diasVencimento';
+export type SortFieldType = 'razao_social' | 'regime';
 export type SortDirectionType = 'asc' | 'desc';
 
 interface OutorgaRow {
   client: Client;
   pipeline?: WorkflowPipeline;
+  stepKey: string;
   dataLiberacao?: string;
   dataValidade?: string;
   diasVencimento: number | null;
-  situacao: 'ativa' | 'expirado' | 'pendente';
+  situacao: 'ativa' | 'expirado' | 'pendente' | 'na';
   statusEtapa: EtapaColorStatus;
 }
 
-const SITUACAO_PRIORITY: Record<'pendente' | 'expirado' | 'ativa', number> = {
-  pendente: 1,
-  expirado: 2,
-  ativa: 3
-};
+interface ConsolidatedRow {
+  client: Client;
+  pipeline?: WorkflowPipeline;
+  sped: OutorgaRow;
+  apuracao: OutorgaRow;
+}
 
 export default function ControleOutorga() {
   const { getUserName } = useAuth();
@@ -56,16 +55,14 @@ export default function ControleOutorga() {
   const [clients, setClients] = useState<Client[]>([]);
   const [pipelines, setPipelines] = useState<WorkflowPipeline[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Filtros
-  const [activeTab, setActiveTab] = useState<OutorgaTabType>('sped');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('todos');
   const [selectedRegimeFilter, setSelectedRegimeFilter] = useState<string>('todos');
 
-  // Ordenação (Padrão: Situação - Pendente, Expirado, Ativa)
-  const [sortField, setSortField] = useState<SortFieldType>('situacao');
+  // Ordenação
+  const [sortField, setSortField] = useState<SortFieldType>('razao_social');
   const [sortDirection, setSortDirection] = useState<SortDirectionType>('asc');
 
   // Modal de Edição de Outorga
@@ -75,15 +72,11 @@ export default function ControleOutorga() {
   const [editStatusEtapa, setEditStatusEtapa] = useState<EtapaColorStatus>('pendente');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // ────────────────────────────────────────────────
   // Fetch de dados
-  // ────────────────────────────────────────────────
   const fetchData = async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
-      else setRefreshing(true);
 
-      // 1. Clientes (Apenas Clientes Recorrentes - POCs não entram neste módulo)
       const { data: clientsData, error: clientErr } = await supabase
         .from('clients')
         .select('*')
@@ -93,7 +86,6 @@ export default function ControleOutorga() {
       const recurrentClientsOnly = (clientsData || []).filter(c => c.tipo_contrato !== 'poc');
       setClients(recurrentClientsOnly);
 
-      // 2. Pipelines da Fase 1 (Diagnóstico)
       const { data: pipeData, error: pipeErr } = await supabase
         .from('workflow_pipelines')
         .select('*')
@@ -106,7 +98,6 @@ export default function ControleOutorga() {
       console.error('Erro ao carregar dados de outorga:', message);
     } finally {
       if (!isSilent) setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -114,9 +105,7 @@ export default function ControleOutorga() {
     fetchData();
   }, []);
 
-  // ────────────────────────────────────────────────
   // Cálculo de Dias Vencimento
-  // ────────────────────────────────────────────────
   const calculateDaysToExpiration = (validadeStr?: string | null): number | null => {
     if (!validadeStr) return null;
     const today = new Date();
@@ -132,50 +121,121 @@ export default function ControleOutorga() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Mapeamento dos dados para exibição por empresa
-  const outorgaRows = useMemo<OutorgaRow[]>(() => {
+  // Obter a chave de etapa de Apuração para o cliente
+  const getApuracaoStepKey = (client: Client, pipe?: WorkflowPipeline): string => {
+    if (pipe?.datas_etapas?.['3'] || pipe?.status_etapas?.['3']) return '3';
+    if (pipe?.datas_etapas?.['4'] || pipe?.status_etapas?.['4']) return '4';
+    if (pipe?.datas_etapas?.['2'] || pipe?.status_etapas?.['2']) return '2';
+    const cRegime = client.regime || getRegimeFromSegmento(client.segmento);
+    return cRegime === 'diferenciado' ? '3' : '4';
+  };
+
+  // Mapeamento dos dados consolidados de SPED e Apuração para cada cliente
+  const consolidatedList = useMemo<ConsolidatedRow[]>(() => {
     return clients.map(client => {
       const pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
-      const stepKey = activeTab === 'sped' ? '1' : '3';
-      const stepDates = pipe?.datas_etapas?.[stepKey];
-      const dataLiberacao = stepDates?.data_inicio || '';
-      const dataValidade = stepDates?.data_fim || '';
 
-      const rawStatus = pipe?.status_etapas?.[stepKey];
-      const statusEtapa = normalizeStepStatus(rawStatus);
+      // 1. SPED (Etapa 1)
+      const spedStepKey = '1';
+      const spedDates = pipe?.datas_etapas?.[spedStepKey];
+      const spedLib = spedDates?.data_inicio || '';
+      const spedVal = spedDates?.data_fim || '';
+      const spedRawStatus = pipe?.status_etapas?.[spedStepKey];
+      const spedStatusEtapa = normalizeStepStatus(spedRawStatus);
+      const spedDias = calculateDaysToExpiration(spedVal);
 
-      const dias = calculateDaysToExpiration(dataValidade);
-
-      let situacao: 'ativa' | 'expirado' | 'pendente' = 'pendente';
-      if (dias !== null) {
-        if (dias >= 0) situacao = 'ativa';
-        else situacao = 'expirado';
+      let spedSituacao: 'ativa' | 'expirado' | 'pendente' | 'na' = 'pendente';
+      if (spedStatusEtapa === 'na') {
+        spedSituacao = 'na';
+      } else if (spedDias !== null) {
+        if (spedDias >= 0) spedSituacao = 'ativa';
+        else spedSituacao = 'expirado';
       }
+
+      const spedRow: OutorgaRow = {
+        client,
+        pipeline: pipe,
+        stepKey: spedStepKey,
+        dataLiberacao: spedLib,
+        dataValidade: spedVal,
+        diasVencimento: spedDias,
+        situacao: spedSituacao,
+        statusEtapa: spedStatusEtapa
+      };
+
+      // 2. Apuração Assistida (Etapa 3/4/2)
+      const apurStepKey = getApuracaoStepKey(client, pipe);
+      const apurDates = pipe?.datas_etapas?.[apurStepKey];
+      const apurLib = apurDates?.data_inicio || '';
+      const apurVal = apurDates?.data_fim || '';
+      const apurRawStatus = pipe?.status_etapas?.[apurStepKey];
+      const apurStatusEtapa = normalizeStepStatus(apurRawStatus);
+      const apurDias = calculateDaysToExpiration(apurVal);
+
+      let apurSituacao: 'ativa' | 'expirado' | 'pendente' | 'na' = 'pendente';
+      if (apurStatusEtapa === 'na') {
+        apurSituacao = 'na';
+      } else if (apurDias !== null) {
+        if (apurDias >= 0) apurSituacao = 'ativa';
+        else apurSituacao = 'expirado';
+      }
+
+      const apurRow: OutorgaRow = {
+        client,
+        pipeline: pipe,
+        stepKey: apurStepKey,
+        dataLiberacao: apurLib,
+        dataValidade: apurVal,
+        diasVencimento: apurDias,
+        situacao: apurSituacao,
+        statusEtapa: apurStatusEtapa
+      };
 
       return {
         client,
         pipeline: pipe,
-        dataLiberacao,
-        dataValidade,
-        diasVencimento: dias,
-        situacao,
-        statusEtapa
+        sped: spedRow,
+        apuracao: apurRow
       };
     });
-  }, [clients, pipelines, activeTab]);
+  }, [clients, pipelines]);
 
-  // Estatísticas Rápidas (KPIs)
+  // Estatísticas Rápidas Globais (KPIs Banner)
   const stats = useMemo(() => {
-    const total = outorgaRows.length;
-    const ativas = outorgaRows.filter(r => r.situacao === 'ativa').length;
-    const expiradas = outorgaRows.filter(r => r.situacao === 'expirado').length;
-    const vencendoBreve = outorgaRows.filter(r => r.diasVencimento !== null && r.diasVencimento >= 0 && r.diasVencimento <= 30).length;
-    const pendentes = outorgaRows.filter(r => r.situacao === 'pendente').length;
+    let ativas = 0;
+    let vencendoBreve = 0;
+    let expiradas = 0;
+    let pendentes = 0;
+    let naoSeAplica = 0;
 
-    return { total, ativas, expiradas, vencendoBreve, pendentes };
-  }, [outorgaRows]);
+    consolidatedList.forEach(row => {
+      [row.sped, row.apuracao].forEach(item => {
+        if (item.situacao === 'ativa') {
+          ativas++;
+          if (item.diasVencimento !== null && item.diasVencimento <= 30) {
+            vencendoBreve++;
+          }
+        } else if (item.situacao === 'expirado') {
+          expiradas++;
+        } else if (item.situacao === 'na') {
+          naoSeAplica++;
+        } else {
+          pendentes++;
+        }
+      });
+    });
 
-  // Alternar Ordenação ao clicar no cabeçalho
+    return {
+      total: clients.length,
+      ativas,
+      expiradas,
+      vencendoBreve,
+      pendentes,
+      naoSeAplica
+    };
+  }, [consolidatedList, clients]);
+
+  // Alternar Ordenação
   const handleSort = (field: SortFieldType) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -185,7 +245,6 @@ export default function ControleOutorga() {
     }
   };
 
-  // Renderizar ícone de ordenação no cabeçalho
   const renderSortIcon = (field: SortFieldType) => {
     if (sortField !== field) {
       return <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 group-hover/th:opacity-100 transition-opacity" />;
@@ -197,11 +256,9 @@ export default function ControleOutorga() {
     );
   };
 
-  // Filtros aplicados e Ordenação à tabela
-  const filteredAndSortedRows = useMemo(() => {
-    // 1. Filtrar
-    const filtered = outorgaRows.filter(row => {
-      // Busca
+  // Filtros aplicados à Visão Consolidada
+  const filteredConsolidatedRows = useMemo(() => {
+    const filtered = consolidatedList.filter(row => {
       const search = searchTerm.toLowerCase().trim();
       if (search) {
         const matchRazao = row.client.razao_social.toLowerCase().includes(search);
@@ -210,13 +267,15 @@ export default function ControleOutorga() {
         if (!matchRazao && !matchCNPJ && !matchGrupo) return false;
       }
 
-      // Status
-      if (selectedStatusFilter === 'ativas' && row.situacao !== 'ativa') return false;
-      if (selectedStatusFilter === 'expiradas' && row.situacao !== 'expirado') return false;
-      if (selectedStatusFilter === 'vencendo' && (row.diasVencimento === null || row.diasVencimento < 0 || row.diasVencimento > 30)) return false;
-      if (selectedStatusFilter === 'pendentes' && row.situacao !== 'pendente') return false;
+      if (selectedStatusFilter === 'ativas' && (row.sped.situacao !== 'ativa' && row.apuracao.situacao !== 'ativa')) return false;
+      if (selectedStatusFilter === 'expiradas' && (row.sped.situacao !== 'expirado' && row.apuracao.situacao !== 'expirado')) return false;
+      if (selectedStatusFilter === 'vencendo' && (
+        (row.sped.diasVencimento === null || row.sped.diasVencimento < 0 || row.sped.diasVencimento > 30 || row.sped.situacao === 'na') &&
+        (row.apuracao.diasVencimento === null || row.apuracao.diasVencimento < 0 || row.apuracao.diasVencimento > 30 || row.apuracao.situacao === 'na')
+      )) return false;
+      if (selectedStatusFilter === 'pendentes' && (row.sped.situacao !== 'pendente' && row.apuracao.situacao !== 'pendente')) return false;
+      if (selectedStatusFilter === 'na' && (row.sped.situacao !== 'na' && row.apuracao.situacao !== 'na')) return false;
 
-      // Regime
       if (selectedRegimeFilter !== 'todos') {
         const cRegime = row.client.regime || getRegimeFromSegmento(row.client.segmento);
         if (cRegime !== selectedRegimeFilter) return false;
@@ -225,49 +284,20 @@ export default function ControleOutorga() {
       return true;
     });
 
-    // 2. Ordenar
     return filtered.sort((a, b) => {
       let result = 0;
-
-      if (sortField === 'situacao') {
-        const priorityA = SITUACAO_PRIORITY[a.situacao] || 99;
-        const priorityB = SITUACAO_PRIORITY[b.situacao] || 99;
-        result = priorityA - priorityB;
-        if (result === 0) {
-          // Secundário: Dias Vencimento
-          if (a.diasVencimento !== null && b.diasVencimento !== null) {
-            result = a.diasVencimento - b.diasVencimento;
-          } else if (a.diasVencimento !== null) {
-            result = -1;
-          } else if (b.diasVencimento !== null) {
-            result = 1;
-          } else {
-            result = a.client.razao_social.localeCompare(b.client.razao_social);
-          }
-        }
-      } else if (sortField === 'razao_social') {
+      if (sortField === 'razao_social') {
         result = a.client.razao_social.localeCompare(b.client.razao_social);
-      } else if (sortField === 'dataLiberacao') {
-        const dateA = a.dataLiberacao || '9999-12-31';
-        const dateB = b.dataLiberacao || '9999-12-31';
-        result = dateA.localeCompare(dateB);
-      } else if (sortField === 'dataValidade') {
-        const dateA = a.dataValidade || '9999-12-31';
-        const dateB = b.dataValidade || '9999-12-31';
-        result = dateA.localeCompare(dateB);
-      } else if (sortField === 'diasVencimento') {
-        const valA = a.diasVencimento !== null ? a.diasVencimento : 999999;
-        const valB = b.diasVencimento !== null ? b.diasVencimento : 999999;
-        result = valA - valB;
+      } else if (sortField === 'regime') {
+        const regA = a.client.regime || getRegimeFromSegmento(a.client.segmento);
+        const regB = b.client.regime || getRegimeFromSegmento(b.client.segmento);
+        result = regA.localeCompare(regB);
       }
-
       return sortDirection === 'asc' ? result : -result;
     });
-  }, [outorgaRows, searchTerm, selectedStatusFilter, selectedRegimeFilter, sortField, sortDirection]);
+  }, [consolidatedList, searchTerm, selectedStatusFilter, selectedRegimeFilter, sortField, sortDirection]);
 
-  // ────────────────────────────────────────────────
   // Abrir Modal de Edição
-  // ────────────────────────────────────────────────
   const handleOpenEdit = (row: OutorgaRow) => {
     setEditingRow(row);
     setEditLiberacao(row.dataLiberacao || '');
@@ -275,34 +305,24 @@ export default function ControleOutorga() {
     setEditStatusEtapa(row.statusEtapa || 'pendente');
   };
 
-function getErrorMessage(err: unknown): string {
-  if (!err) return 'Erro desconhecido';
-  if (typeof err === 'string') return err;
-  if (typeof err === 'object' && err !== null) {
-    const e = err as Record<string, any>;
-    if (typeof e.message === 'string' && e.message) return e.message;
-    if (typeof e.details === 'string' && e.details) return e.details;
-    if (typeof e.error_description === 'string' && e.error_description) return e.error_description;
-    try {
-      return JSON.stringify(err);
-    } catch {
-      return String(err);
+  const getErrorMessage = (err: unknown): string => {
+    if (!err) return 'Erro desconhecido';
+    if (typeof err === 'string') return err;
+    if (typeof err === 'object' && err !== null) {
+      const e = err as Record<string, unknown>;
+      if (typeof e.message === 'string' && e.message) return e.message;
+      if (typeof e.details === 'string' && e.details) return e.details;
     }
-  }
-  return String(err);
-}
+    return String(err);
+  };
 
-  // ────────────────────────────────────────────────
   // Salvar Edição no Supabase (workflow_pipelines)
-  // ────────────────────────────────────────────────
   const handleSaveEdit = async () => {
     if (!editingRow) return;
     try {
       setSavingEdit(true);
-      const { client } = editingRow;
-      const stepKey = activeTab === 'sped' ? '1' : '3';
+      const { client, stepKey } = editingRow;
 
-      // 1. Buscar a versão mais recente do pipeline Fase 1 diretamente do banco de dados
       const { data: existingPipes, error: fetchErr } = await supabase
         .from('workflow_pipelines')
         .select('*')
@@ -330,8 +350,7 @@ function getErrorMessage(err: unknown): string {
       };
 
       if (targetPipe) {
-        // Atualizar pipeline existente
-        const updatePayload: Record<string, any> = {
+        const updatePayload: Record<string, unknown> = {
           datas_etapas: updatedDates,
           status_etapas: updatedStatuses,
           updated_at: new Date().toISOString()
@@ -344,8 +363,7 @@ function getErrorMessage(err: unknown): string {
 
         if (upErr) throw upErr;
       } else {
-        // Criar novo pipeline Fase 1 se não existir
-        const insertPayload: Record<string, any> = {
+        const insertPayload: Record<string, unknown> = {
           client_id: client.id,
           fase_grupo: 'fase_1',
           etapa_atual: 1,
@@ -364,7 +382,7 @@ function getErrorMessage(err: unknown): string {
 
       await logActivity({
         titulo: 'Atualização de Outorga',
-        descricao: `Outorga (${activeTab.toUpperCase()}) atualizada para ${client.razao_social}: Liberação (${editLiberacao || 'N/I'}) | Validade (${editValidade || 'N/I'})`,
+        descricao: `Outorga (${stepKey === '1' ? 'SPED' : 'APURAÇÃO'}) atualizada para ${client.razao_social}: Liberação (${editLiberacao || 'N/I'}) | Validade (${editValidade || 'N/I'}) | Status (${editStatusEtapa})`,
         tipo_log: 'info',
         client_id: client.id,
         usuario_nome: getUserName()
@@ -382,8 +400,7 @@ function getErrorMessage(err: unknown): string {
   };
 
   // Navegar direto para o Cliente Recorrente na Fase 1
-  const handleNavigateToWorkflow = (clientId: string) => {
-    const stepNum = activeTab === 'apuracao' ? 3 : 1;
+  const handleNavigateToWorkflow = (clientId: string, stepNum: number) => {
     navigate('/fluxo-de-trabalho', {
       state: {
         clientId,
@@ -395,7 +412,7 @@ function getErrorMessage(err: unknown): string {
 
   return (
     <div className="flex flex-col w-full gap-6 relative p-2 animate-in fade-in duration-300 pb-12">
-      {/* Cabeçalho Hero com KPIs idêntico ao módulo Cliente Recorrente */}
+      {/* Cabeçalho Hero com KPIs */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -418,136 +435,56 @@ function getErrorMessage(err: unknown): string {
           </div>
         </div>
 
-        {/* Banner de KPIs estilo Cliente Recorrente */}
+        {/* Banner de KPIs Consolidados */}
         <div className="flex flex-col gap-3 relative z-10 shrink-0">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/10">
             {/* Metric 1: Total Empresas */}
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Empresas</span>
+              <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Total</span>
               <span className="text-xl font-black text-white mt-0.5">{stats.total}</span>
               <span className="text-[10px] text-slate-400">Recorrentes</span>
             </div>
 
             {/* Metric 2: Ativas */}
-            <div className="flex flex-col border-l border-white/10 pl-3">
-              <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">Ativas</span>
+            <div className="flex flex-col border-l border-white/10 pl-2.5">
+              <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">Vigentes</span>
               <span className="text-xl font-black text-emerald-400 mt-0.5">{stats.ativas}</span>
-              <span className="text-[10px] text-emerald-300/80">
-                {stats.total > 0 ? `${Math.round((stats.ativas / stats.total) * 100)}%` : '0%'}
-              </span>
+              <span className="text-[10px] text-emerald-300/80">Ativas</span>
             </div>
 
             {/* Metric 3: Vencendo (30d) */}
-            <div className="flex flex-col border-l border-white/10 pl-3">
-              <span className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">Vencendo (30d)</span>
+            <div className="flex flex-col border-l border-white/10 pl-2.5">
+              <span className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">Vencendo</span>
               <span className="text-xl font-black text-amber-300 mt-0.5">{stats.vencendoBreve}</span>
-              <span className="text-[10px] text-amber-300/80">Atenção</span>
+              <span className="text-[10px] text-amber-300/80">Próx. 30d</span>
             </div>
 
             {/* Metric 4: Expiradas */}
-            <div className="flex flex-col border-l border-white/10 pl-3">
+            <div className="flex flex-col border-l border-white/10 pl-2.5">
               <span className="text-[10px] uppercase font-bold text-rose-300 tracking-wider">Expiradas</span>
               <span className="text-xl font-black text-rose-400 mt-0.5">{stats.expiradas}</span>
-              <span className="text-[10px] text-rose-300/80">Vencidas</span>
+              <span className="text-[10px] text-rose-300/80">Ação necess.</span>
             </div>
 
             {/* Metric 5: Pendentes */}
-            <div className="flex flex-col border-l border-white/10 pl-3">
+            <div className="flex flex-col border-l border-white/10 pl-2.5">
               <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Pendentes</span>
-              <span className="text-xl font-black text-slate-300 mt-0.5">{stats.pendentes}</span>
+              <span className="text-xl font-black text-slate-200 mt-0.5">{stats.pendentes}</span>
               <span className="text-[10px] text-slate-400">Sem data</span>
             </div>
-          </div>
 
-          {/* Botão de Atualizar dados no Header */}
-          <div className="flex items-center justify-end">
-            <button
-              onClick={() => fetchData(true)}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl text-xs font-semibold backdrop-blur-md transition-colors cursor-pointer disabled:opacity-50"
-              title="Atualizar dados"
-            >
-              <RefreshCw className={cn("w-3.5 h-3.5 text-indigo-300", refreshing && "animate-spin")} />
-              <span>Atualizar</span>
-            </button>
+            {/* Metric 6: Não se Aplica */}
+            <div className="flex flex-col border-l border-white/10 pl-2.5">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">N/A</span>
+              <span className="text-xl font-black text-slate-300 mt-0.5">{stats.naoSeAplica}</span>
+              <span className="text-[10px] text-slate-400">Isentos</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Abas e Filtros de Pesquisa */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col gap-4">
-        {/* Abas para seleção do tipo de Outorga com Cores Distintas (Evitar Confusão) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/60">
-            {/* Aba Outorga SPED (Tema Indigo / Azul) */}
-            <button
-              onClick={() => setActiveTab('sped')}
-              className={cn(
-                "px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer",
-                activeTab === 'sped'
-                  ? "bg-indigo-600 text-white shadow-md border border-indigo-700 ring-2 ring-indigo-200 scale-[1.02]"
-                  : "bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
-              )}
-            >
-              <FileCheck className="w-4 h-4 shrink-0" />
-              <span>Outorga SPED (Etapa 1)</span>
-            </button>
-
-            {/* Aba Outorga Apuração Assistida (Tema Roxo / Purple) */}
-            <button
-              onClick={() => setActiveTab('apuracao')}
-              className={cn(
-                "px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer",
-                activeTab === 'apuracao'
-                  ? "bg-purple-600 text-white shadow-md border border-purple-700 ring-2 ring-purple-200 scale-[1.02]"
-                  : "bg-purple-50/70 text-purple-700 hover:bg-purple-100 border border-purple-200"
-              )}
-            >
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>Outorga Apuração Assistida (Etapa 3)</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
-            <span className="bg-slate-100 text-slate-700 font-semibold px-2.5 py-1 rounded-lg border border-slate-200">
-              Ordenação Padrão: Pendente → Expirado → Ativa
-            </span>
-            <span>
-              Exibindo <strong className="text-slate-800">{filteredAndSortedRows.length}</strong> de {outorgaRows.length} empresas
-            </span>
-          </div>
-        </div>
-
-        {/* Banner de Alerta Visual da Aba Ativa para evitar erros no preenchimento */}
-        <div className={cn(
-          "px-4 py-2.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all shadow-2xs",
-          activeTab === 'sped'
-            ? "bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border-indigo-200 text-indigo-900"
-            : "bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50 border-purple-200 text-purple-900"
-        )}>
-          <div className="flex items-center gap-2">
-            {activeTab === 'sped' ? (
-              <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider">
-                AZUL — ETAPA 1
-              </span>
-            ) : (
-              <span className="bg-purple-600 text-white px-2 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider">
-                ROXO — ETAPA 3
-              </span>
-            )}
-            <span>
-              {activeTab === 'sped'
-                ? 'Você está visualizando e editando as outorgas da Etapa 1: OUTORGA SPED.'
-                : 'Você está visualizando e editando as outorgas da Etapa 3: OUTORGA APURAÇÃO ASSISTIDA.'}
-            </span>
-          </div>
-
-          <span className="text-[11px] font-semibold opacity-75 hidden sm:inline">
-            {activeTab === 'sped' ? 'Etapa 1 de Diagnóstico' : 'Etapa 3 de Diagnóstico'}
-          </span>
-        </div>
-
-        {/* Linha de Busca e Filtros */}
+      {/* ──────── Controles de Busca & Filtro ──────── */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Busca */}
           <div className="relative">
@@ -570,10 +507,11 @@ function getErrorMessage(err: unknown): string {
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
             >
               <option value="todos">Todas as Situações</option>
-              <option value="pendentes">Somente Pendentes (Pré-definição)</option>
+              <option value="pendentes">Somente Pendentes (Sem Data)</option>
               <option value="expiradas">Somente Expiradas</option>
               <option value="vencendo">Vencendo nos Próximos 30 dias</option>
-              <option value="ativas">Somente Ativas</option>
+              <option value="ativas">Somente Vigentes (Ativas)</option>
+              <option value="na">Não se Aplica (N/A)</option>
             </select>
           </div>
 
@@ -594,29 +532,28 @@ function getErrorMessage(err: unknown): string {
         </div>
       </div>
 
-      {/* Tabela Principal com Ordenação Interativa & Rolagem para ~8 empresas */}
+      {/* ──────── Tabela Única Consolidada (Ambas as Outorgas) ──────── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {loading ? (
           <div className="p-12 flex flex-col items-center justify-center text-slate-500 gap-3">
             <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
             <span className="text-xs font-medium">Carregando controle de outorgas...</span>
           </div>
-        ) : filteredAndSortedRows.length === 0 ? (
+        ) : filteredConsolidatedRows.length === 0 ? (
           <div className="p-12 flex flex-col items-center justify-center text-slate-400 gap-2">
             <Building2 className="w-10 h-10 text-slate-300 stroke-1" />
             <p className="text-sm font-semibold text-slate-600 mt-1">Nenhuma empresa encontrada</p>
             <p className="text-xs text-slate-400">Tente ajustar os termos de busca ou os filtros aplicados.</p>
           </div>
         ) : (
-          /* Container com altura máxima (~8 linhas visíveis) e rolagem suave */
-          <div className="max-h-[520px] overflow-y-auto scrollbar-thin">
-            <table className="w-full text-left border-collapse relative">
+          <div className="max-h-[580px] overflow-y-auto scrollbar-thin">
+            <table className="w-full text-left border-collapse table-fixed relative">
               <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-xs">
                 <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-wider select-none">
-                  {/* Header Razão Social */}
-                  <th 
+                  {/* Header Razão Social (36% de largura) */}
+                  <th
                     onClick={() => handleSort('razao_social')}
-                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th w-[36%]"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>Razão Social / CNPJ</span>
@@ -624,74 +561,44 @@ function getErrorMessage(err: unknown): string {
                     </div>
                   </th>
 
-                  {/* Header Regime / Segmento */}
-                  <th className="py-3.5 px-4 bg-slate-50">Regime / Segmento</th>
-
-                  {/* Header Data Liberação */}
-                  <th 
-                    onClick={() => handleSort('dataLiberacao')}
-                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
+                  {/* Header Regime (14% de largura) */}
+                  <th
+                    onClick={() => handleSort('regime')}
+                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th w-[14%]"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Data Liberação</span>
-                      {renderSortIcon('dataLiberacao')}
+                      <span>Regime</span>
+                      {renderSortIcon('regime')}
                     </div>
                   </th>
 
-                  {/* Header Validade */}
-                  <th 
-                    onClick={() => handleSort('dataValidade')}
-                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Validade</span>
-                      {renderSortIcon('dataValidade')}
-                    </div>
+                  {/* Header Outorga SPED (25% de largura) */}
+                  <th className="py-3.5 px-4 bg-indigo-50/60 text-indigo-900 border-l border-indigo-100 w-[25%]">
+                    Outorga SPED (Etapa 1)
                   </th>
 
-                  {/* Header Dias Vencimento */}
-                  <th 
-                    onClick={() => handleSort('diasVencimento')}
-                    className="py-3.5 px-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Dias Vencimento</span>
-                      {renderSortIcon('diasVencimento')}
-                    </div>
+                  {/* Header Outorga Apuração (25% de largura) */}
+                  <th className="py-3.5 px-4 bg-purple-50/60 text-purple-900 border-l border-purple-100 w-[25%]">
+                    Outorga Apuração Assistida (Etapa 3/2)
                   </th>
-
-                  {/* Header Situação (Default Active Sort) */}
-                  <th 
-                    onClick={() => handleSort('situacao')}
-                    className="py-3.5 px-4 bg-slate-50 text-center cursor-pointer hover:bg-slate-100 transition-colors group/th"
-                  >
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span>Situação</span>
-                      {renderSortIcon('situacao')}
-                    </div>
-                  </th>
-
-                  {/* Header Ações */}
-                  <th className="py-3.5 px-4 bg-slate-50 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                {filteredAndSortedRows.map((row) => {
+                {filteredConsolidatedRows.map((row) => {
                   const cRegime = row.client.regime || getRegimeFromSegmento(row.client.segmento);
                   const regimeMeta = REGIMES_CONFIG[cRegime];
 
                   return (
-                    <tr 
-                      key={row.client.id}
-                      className="hover:bg-slate-50/80 transition-colors group"
-                    >
-                      {/* Razão Social & CNPJ */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                            {row.client.razao_social}
+                    <tr key={row.client.id} className="hover:bg-slate-50/80 transition-colors group">
+                      {/* Razão Social & CNPJ (36%) */}
+                      <td className="py-3.5 px-4 w-[36%]">
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5 flex-wrap">
+                            <span className="truncate max-w-[340px]" title={row.client.razao_social}>
+                              {row.client.razao_social}
+                            </span>
                             {row.client.nome_grupo && (
-                              <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
                                 {row.client.nome_grupo}
                               </span>
                             )}
@@ -702,108 +609,92 @@ function getErrorMessage(err: unknown): string {
                         </div>
                       </td>
 
-                      {/* Regime / Segmento */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col gap-1 max-w-[200px]">
+                      {/* Regime (14%) */}
+                      <td className="py-3.5 px-4 w-[14%]">
+                        <div className="flex flex-col gap-1 pr-2">
                           <span className={cn(
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit",
+                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border w-fit shrink-0",
                             regimeMeta?.badgeBg || 'bg-slate-50',
                             regimeMeta?.badgeText || 'text-slate-600',
                             regimeMeta?.badgeBorder || 'border-slate-200'
                           )}>
                             {regimeMeta?.shortLabel || cRegime}
                           </span>
-                          <span className="text-[11px] text-slate-500 truncate" title={row.client.segmento}>
-                            {row.client.segmento}
-                          </span>
                         </div>
                       </td>
 
-                      {/* Data Liberação */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {row.dataLiberacao ? (
-                          <div className="flex items-center gap-1.5 text-slate-800 font-medium">
-                            <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span>{new Date(row.dataLiberacao + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                      {/* Coluna Outorga SPED (25%) */}
+                      <td className="py-3.5 px-4 w-[25%] bg-indigo-50/20 border-l border-indigo-100">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {row.sped.situacao === 'ativa' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Ativa
+                              </span>
+                            ) : row.sped.situacao === 'expirado' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" /> Expirado
+                              </span>
+                            ) : row.sped.situacao === 'na' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                                <Slash className="w-3 h-3 text-slate-500" /> Não se aplica
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" /> Pendente
+                              </span>
+                            )}
+
+                            {row.sped.dataValidade && row.sped.situacao !== 'na' && (
+                              <span className="text-[11px] text-slate-600 font-mono whitespace-nowrap">
+                                Val: {new Date(row.sped.dataValidade + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">Não informada</span>
-                        )}
-                      </td>
 
-                      {/* Validade */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {row.dataValidade ? (
-                          <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
-                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>{new Date(row.dataValidade + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">Não informada</span>
-                        )}
-                      </td>
-
-                      {/* Dias Vencimento */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {row.diasVencimento !== null ? (
-                          <span className={cn(
-                            "font-extrabold text-xs px-2.5 py-1 rounded-lg border inline-flex items-center gap-1",
-                            row.diasVencimento < 0 
-                              ? "bg-rose-50 text-rose-700 border-rose-200" 
-                              : row.diasVencimento <= 30 
-                              ? "bg-amber-50 text-amber-800 border-amber-200" 
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          )}>
-                            <Clock className="w-3 h-3 shrink-0" />
-                            {row.diasVencimento < 0 
-                              ? `Vencido há ${Math.abs(row.diasVencimento)} dia(s)` 
-                              : row.diasVencimento === 0 
-                              ? 'Vence hoje!' 
-                              : `${row.diasVencimento} dia(s)`}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">—</span>
-                        )}
-                      </td>
-
-                      {/* Situação */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {row.situacao === 'ativa' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            Ativa
-                          </span>
-                        ) : row.situacao === 'expirado' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                            Expirado
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                            Pendente
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Ações */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => handleOpenEdit(row)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition-colors cursor-pointer"
-                            title="Editar datas da Outorga"
+                            onClick={() => handleOpenEdit(row.sped)}
+                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 underline cursor-pointer shrink-0"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-3 h-3" /> Editar
                           </button>
+                        </div>
+                      </td>
+
+                      {/* Coluna Outorga Apuração Assistida (25%) */}
+                      <td className="py-3.5 px-4 w-[25%] bg-purple-50/20 border-l border-purple-100">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {row.apuracao.situacao === 'ativa' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Ativa
+                              </span>
+                            ) : row.apuracao.situacao === 'expirado' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" /> Expirado
+                              </span>
+                            ) : row.apuracao.situacao === 'na' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                                <Slash className="w-3 h-3 text-slate-500" /> Não se aplica
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" /> Pendente
+                              </span>
+                            )}
+
+                            {row.apuracao.dataValidade && row.apuracao.situacao !== 'na' && (
+                              <span className="text-[11px] text-slate-600 font-mono whitespace-nowrap">
+                                Val: {new Date(row.apuracao.dataValidade + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
 
                           <button
-                            onClick={() => handleNavigateToWorkflow(row.client.id)}
-                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
-                            title="Ver esteira da empresa em Cliente Recorrente"
+                            onClick={() => handleOpenEdit(row.apuracao)}
+                            className="text-[10px] font-bold text-purple-600 hover:text-purple-800 flex items-center gap-0.5 underline cursor-pointer shrink-0"
                           >
-                            <span>Fase 1</span>
-                            <ExternalLink className="w-3 h-3" />
+                            <Edit3 className="w-3 h-3" /> Editar
                           </button>
                         </div>
                       </td>
@@ -816,12 +707,14 @@ function getErrorMessage(err: unknown): string {
         )}
       </div>
 
-      {/* Modal de Edição de Outorga com Cores Dinâmicas segundo a Aba Ativa */}
+      {/* Modal de Edição de Outorga */}
       {editingRow && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className={cn(
             "bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border relative flex flex-col gap-5 border-t-4",
-            activeTab === 'sped' ? "border-indigo-600 border-x-slate-200 border-b-slate-200" : "border-purple-600 border-x-slate-200 border-b-slate-200"
+            editingRow.stepKey === '1'
+              ? "border-indigo-600 border-x-slate-200 border-b-slate-200"
+              : "border-purple-600 border-x-slate-200 border-b-slate-200"
           )}>
             <button
               onClick={() => setEditingRow(null)}
@@ -833,18 +726,18 @@ function getErrorMessage(err: unknown): string {
             <div>
               <div className={cn(
                 "flex items-center gap-2 text-xs font-extrabold px-3 py-1 rounded-lg border w-fit shadow-2xs",
-                activeTab === 'sped'
+                editingRow.stepKey === '1'
                   ? "bg-indigo-50 text-indigo-800 border-indigo-200"
                   : "bg-purple-50 text-purple-800 border-purple-200"
               )}>
-                {activeTab === 'sped' ? <FileCheck className="w-4 h-4 text-indigo-600" /> : <ShieldCheck className="w-4 h-4 text-purple-600" />}
-                <span>PREENCHENDO: {activeTab === 'sped' ? 'OUTORGA SPED (ETAPA 1)' : 'OUTORGA APURAÇÃO ASSISTIDA (ETAPA 3)'}</span>
+                {editingRow.stepKey === '1' ? <FileCheck className="w-4 h-4 text-indigo-600" /> : <ShieldCheck className="w-4 h-4 text-purple-600" />}
+                <span>PREENCHENDO: {editingRow.stepKey === '1' ? 'OUTORGA SPED (ETAPA 1)' : `OUTORGA APURAÇÃO ASSISTIDA (ETAPA ${editingRow.stepKey})`}</span>
               </div>
               <h3 className="text-base font-bold text-slate-900 mt-2.5 truncate">
                 {editingRow.client.razao_social}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Atualize a data de liberação e validade para sincronizar com a Fase 1 da esteira.
+                Atualize a data de liberação, validade ou status para sincronizar com a Fase 1 da esteira.
               </p>
             </div>
 
@@ -857,7 +750,7 @@ function getErrorMessage(err: unknown): string {
                   onChange={(e) => setEditLiberacao(e.target.value)}
                   className={cn(
                     "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs text-slate-800 outline-none transition-all",
-                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                    editingRow.stepKey === '1' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
                   )}
                 />
               </div>
@@ -870,7 +763,7 @@ function getErrorMessage(err: unknown): string {
                   onChange={(e) => setEditValidade(e.target.value)}
                   className={cn(
                     "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs text-slate-800 outline-none transition-all",
-                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                    editingRow.stepKey === '1' ? "border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" : "border-slate-200 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
                   )}
                 />
               </div>
@@ -882,7 +775,7 @@ function getErrorMessage(err: unknown): string {
                   onChange={(e) => setEditStatusEtapa(e.target.value as EtapaColorStatus)}
                   className={cn(
                     "w-full h-9 px-3 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 outline-none cursor-pointer",
-                    activeTab === 'sped' ? "border-slate-200 focus:bg-white focus:border-indigo-500" : "border-slate-200 focus:bg-white focus:border-purple-500"
+                    editingRow.stepKey === '1' ? "border-slate-200 focus:bg-white focus:border-indigo-500" : "border-slate-200 focus:bg-white focus:border-purple-500"
                   )}
                 >
                   <option value="pendente">Pendente</option>
@@ -905,7 +798,7 @@ function getErrorMessage(err: unknown): string {
                 disabled={savingEdit}
                 className={cn(
                   "px-4 py-2 rounded-xl text-xs font-semibold text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50",
-                  activeTab === 'sped' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-purple-600 hover:bg-purple-700"
+                  editingRow.stepKey === '1' ? "bg-indigo-600 hover:bg-indigo-700" : "bg-purple-600 hover:bg-purple-700"
                 )}
               >
                 {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
