@@ -34,11 +34,13 @@ export default function CompanyScheduleTab({
   // Cálculo da diferença em dias entre duas datas
   const calculateDays = (start?: string | null, end?: string | null) => {
     if (!start || !end) return null;
-    const d1 = new Date(start);
-    const d2 = new Date(end);
-    const diffTime = Math.abs(d2.getTime() - d1.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    const [y1, m1, d1] = start.split('-').map(Number);
+    const [y2, m2, d2] = end.split('-').map(Number);
+    if (!y1 || !m1 || !d1 || !y2 || !m2 || !d2) return null;
+    const dt1 = new Date(y1, m1 - 1, d1);
+    const dt2 = new Date(y2, m2 - 1, d2);
+    const diffTime = Math.abs(dt2.getTime() - dt1.getTime());
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
   };
 
   // Calcular total de dias do projeto (desconsiderando outorgas)
@@ -46,7 +48,7 @@ export default function CompanyScheduleTab({
 
   fasesDiagnostico.forEach((phaseObj, idx) => {
     const stepNum = idx + 1;
-    const isOutorga = phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || stepNum === 1 || stepNum === 2;
+    const isOutorga = Boolean(phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || phaseObj.key?.toLowerCase().includes('outorga'));
     if (isOutorga) return;
 
     const dates = datasEtapas[String(stepNum)] || (
@@ -155,7 +157,7 @@ export default function CompanyScheduleTab({
               {fasesDiagnostico.map((phaseObj, index) => {
                 const stepNum = index + 1;
                 const stepKey = String(stepNum);
-                const isOutorga = phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || stepNum === 1 || stepNum === 2;
+                const isOutorga = Boolean(phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || phaseObj.key?.toLowerCase().includes('outorga'));
                 const dates = datasEtapas[stepKey] || (
                   stepNum === 5 && startAsIs ? { data_inicio: startAsIs, data_fim: null } :
                   stepNum === 7 && startToBe ? { data_inicio: startToBe, data_fim: null } :

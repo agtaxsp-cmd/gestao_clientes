@@ -450,7 +450,8 @@ export default function FluxoTrabalho() {
 
     const savedStatus = pipe?.status_etapas?.[stepKey];
     const normSaved = savedStatus ? normalizeStepStatus(savedStatus) : null;
-    const isOutorga = stepNum === 1 || stepNum === 2 || stepNum === 3;
+    const phaseObj = clientPhases[stepNum - 1];
+    const isOutorga = Boolean(phaseObj?.key?.startsWith('outorga') || phaseObj?.nome?.toLowerCase().includes('outorga') || phaseObj?.key?.toLowerCase().includes('outorga'));
     const hasDates = Boolean(startDate || endDate);
     const initialStatus = normSaved === 'na'
       ? 'na'
@@ -506,9 +507,10 @@ export default function FluxoTrabalho() {
     setDetailModalEndDate(endDate);
     setDetailModalSelectedMemberIds(detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
 
-    const savedStatus = detailModalPipe?.status_etapas?.[stepKey];
-    const normSavedSwitch = savedStatus ? normalizeStepStatus(savedStatus) : null;
-    const isOutorgaSwitch = stepNum === 1 || stepNum === 2 || stepNum === 3;
+    const savedStatusSwitch = detailModalPipe?.status_etapas?.[stepKey];
+    const normSavedSwitch = savedStatusSwitch ? normalizeStepStatus(savedStatusSwitch) : null;
+    const phaseObjSwitch = clientPhases[stepNum - 1];
+    const isOutorgaSwitch = Boolean(phaseObjSwitch?.key?.startsWith('outorga') || phaseObjSwitch?.nome?.toLowerCase().includes('outorga') || phaseObjSwitch?.key?.toLowerCase().includes('outorga'));
     const hasDatesSwitch = Boolean(startDate || endDate);
     const currentEtapaNum = detailModalPipe?.etapa_atual || 1;
     const initialStatus = normSavedSwitch === 'na'
