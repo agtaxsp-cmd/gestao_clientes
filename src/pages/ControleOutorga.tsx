@@ -579,7 +579,7 @@ export default function ControleOutorga() {
 
                   {/* Header Outorga Apuração (25% de largura) */}
                   <th className="py-3.5 px-4 bg-purple-50/60 text-purple-900 border-l border-purple-100 w-[25%]">
-                    Outorga Apuração Assistida (Etapa 3/2)
+                    Outorga Apuração Assistida (Etapa 3)
                   </th>
                 </tr>
               </thead>
