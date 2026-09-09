@@ -19,11 +19,12 @@ import {
   Calendar,
   ArrowUp,
   ArrowDown,
-  ArrowUpDown
+  ArrowUpDown,
+  Slash
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ActivityLog, WorkflowPhase, WorkflowAssignment, TeamMember, getRegimeFromSegmento } from '../types';
+import { ActivityLog, WorkflowPhase, WorkflowAssignment, TeamMember, getRegimeFromSegmento, normalizeStepStatus } from '../types';
 
 interface TeamMemberWorkload {
   id: string;
@@ -95,6 +96,7 @@ export default function Dashboard() {
     outorgasVencendo: 0,
     outorgasExpiradas: 0,
     outorgasPendentes: 0,
+    outorgasNa: 0,
     totalPocs: 0,
     pocsEmAndamento: 0,
     pocsConvertidas: 0,
@@ -189,21 +191,45 @@ export default function Dashboard() {
       let outorgasVencendoCount = 0;
       let outorgasExpiradasCount = 0;
       let outorgasPendentesCount = 0;
+      let outorgasNaCount = 0;
 
       recurringClients.forEach(c => {
         const pipe = (pipelinesData || []).find(p => p.client_id === c.id && p.fase_grupo === 'fase_1');
-        const spedValidade = pipe?.datas_etapas?.['1']?.data_fim;
-        const apuracaoValidade = pipe?.datas_etapas?.['3']?.data_fim || pipe?.datas_etapas?.['2']?.data_fim;
 
-        [spedValidade, apuracaoValidade].forEach(valStr => {
-          const dias = calculateDaysToExpiration(valStr);
-          if (dias === null) {
+        // SPED (Etapa 1)
+        const spedRawStatus = pipe?.status_etapas?.['1'];
+        const spedStatusEtapa = normalizeStepStatus(spedRawStatus);
+        const spedVal = pipe?.datas_etapas?.['1']?.data_fim;
+        const spedDias = calculateDaysToExpiration(spedVal);
+
+        // Apuração Assistida (Etapa 3 / 4 / 2)
+        let apurStepKey = '4';
+        if (pipe?.datas_etapas?.['3'] || pipe?.status_etapas?.['3']) apurStepKey = '3';
+        else if (pipe?.datas_etapas?.['4'] || pipe?.status_etapas?.['4']) apurStepKey = '4';
+        else if (pipe?.datas_etapas?.['2'] || pipe?.status_etapas?.['2']) apurStepKey = '2';
+        else {
+          const cRegime = c.regime || getRegimeFromSegmento(c.segmento);
+          if (cRegime === 'diferenciado') apurStepKey = '3';
+        }
+
+        const apurRawStatus = pipe?.status_etapas?.[apurStepKey];
+        const apurStatusEtapa = normalizeStepStatus(apurRawStatus);
+        const apurVal = pipe?.datas_etapas?.[apurStepKey]?.data_fim;
+        const apurDias = calculateDaysToExpiration(apurVal);
+
+        [
+          { status: spedStatusEtapa, dias: spedDias },
+          { status: apurStatusEtapa, dias: apurDias }
+        ].forEach(item => {
+          if (item.status === 'na') {
+            outorgasNaCount++;
+          } else if (item.dias === null) {
             outorgasPendentesCount++;
-          } else if (dias < 0) {
+          } else if (item.dias < 0) {
             outorgasExpiradasCount++;
           } else {
             outorgasAtivasCount++;
-            if (dias <= 30) {
+            if (item.dias <= 30) {
               outorgasVencendoCount++;
             }
           }
@@ -223,6 +249,7 @@ export default function Dashboard() {
         outorgasVencendo: outorgasVencendoCount,
         outorgasExpiradas: outorgasExpiradasCount,
         outorgasPendentes: outorgasPendentesCount,
+        outorgasNa: outorgasNaCount,
         totalPocs: totalPocsCount,
         pocsEmAndamento: pocsEmAndamentoCount,
         pocsConvertidas: pocsConvertidasCount,
@@ -714,29 +741,35 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-4 gap-2.5 mt-2">
-              <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col items-center justify-center text-center">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 mb-1" />
-                <span className="text-2xl font-bold text-emerald-900">{stats.outorgasAtivas}</span>
-                <span className="text-[11px] font-semibold text-emerald-700">Vigentes</span>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
+              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 flex flex-col items-center justify-center text-center">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 mb-1" />
+                <span className="text-xl font-bold text-emerald-900">{stats.outorgasAtivas}</span>
+                <span className="text-[10px] font-semibold text-emerald-700">Vigentes</span>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200 flex flex-col items-center justify-center text-center">
-                <Clock className="w-5 h-5 text-amber-600 mb-1" />
-                <span className="text-2xl font-bold text-amber-900">{stats.outorgasVencendo}</span>
-                <span className="text-[11px] font-semibold text-amber-700">Próx. 30 dias</span>
+              <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200 flex flex-col items-center justify-center text-center">
+                <Clock className="w-4 h-4 text-amber-600 mb-1" />
+                <span className="text-xl font-bold text-amber-900">{stats.outorgasVencendo}</span>
+                <span className="text-[10px] font-semibold text-amber-700">Próx. 30d</span>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-red-50/60 border border-red-200 flex flex-col items-center justify-center text-center">
-                <AlertCircle className="w-5 h-5 text-red-600 mb-1" />
-                <span className="text-2xl font-bold text-red-900">{stats.outorgasExpiradas}</span>
-                <span className="text-[11px] font-semibold text-red-700">Expiradas</span>
+              <div className="p-3 rounded-xl bg-red-50/60 border border-red-200 flex flex-col items-center justify-center text-center">
+                <AlertCircle className="w-4 h-4 text-red-600 mb-1" />
+                <span className="text-xl font-bold text-red-900">{stats.outorgasExpiradas}</span>
+                <span className="text-[10px] font-semibold text-red-700">Expiradas</span>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-center">
-                <FileText className="w-5 h-5 text-slate-500 mb-1" />
-                <span className="text-2xl font-bold text-slate-800">{stats.outorgasPendentes}</span>
-                <span className="text-[11px] font-semibold text-slate-600">Sem Data</span>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-center">
+                <FileText className="w-4 h-4 text-slate-500 mb-1" />
+                <span className="text-xl font-bold text-slate-800">{stats.outorgasPendentes}</span>
+                <span className="text-[10px] font-semibold text-slate-600">Sem Data</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-100/80 border border-slate-300 flex flex-col items-center justify-center text-center">
+                <Slash className="w-4 h-4 text-slate-600 mb-1" />
+                <span className="text-xl font-bold text-slate-700">{stats.outorgasNa}</span>
+                <span className="text-[10px] font-semibold text-slate-600">Isentas (N/A)</span>
               </div>
             </div>
 
