@@ -149,10 +149,18 @@ export default function Phase1Stepper({
           {fasesDiagnostico.map((phaseObj, index) => {
             const stepNum = index + 1;
             const stepKey = String(stepNum);
+            const isOutorga = phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || stepNum === 1 || stepNum === 2;
+            const stepDates = pipeFase1?.datas_etapas?.[stepKey];
+            const hasDates = Boolean(stepDates?.data_inicio || stepDates?.data_fim);
             const rawStatus = statusEtapas[stepKey];
-            const stepStatus = rawStatus
-              ? normalizeStepStatus(rawStatus)
-              : (stepNum < f1StepNum || isFase1Concluido ? 'concluido' : 'pendente');
+            const normSt = rawStatus ? normalizeStepStatus(rawStatus) : null;
+
+            const stepStatus = normSt === 'na'
+              ? 'na'
+              : (normSt === 'concluido' || stepNum < f1StepNum || isFase1Concluido || (isOutorga && hasDates)
+                  ? 'concluido'
+                  : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'))
+                );
 
             const assign = getStepResponsibles(stepNum, phaseObj.key);
             const statusMeta = STEP_STATUS_MAP[stepStatus];

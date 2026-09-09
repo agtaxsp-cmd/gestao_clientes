@@ -298,7 +298,7 @@ export default function WorkflowDetailModal({
             {grupo === 'fase_1' && (
               <div className="pt-2 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-indigo-900 block mb-1">Start AS-IS (Confirmação Outorga)</label>
+                  <label className="text-[11px] font-bold text-indigo-900 block mb-1">Apresentação AS-IS</label>
                   <input
                     type="date"
                     value={startAsIs}
@@ -307,7 +307,7 @@ export default function WorkflowDetailModal({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-purple-900 block mb-1">Start TO-BE (Após Pres. AS-IS)</label>
+                  <label className="text-[11px] font-bold text-purple-900 block mb-1">Apresentação TO-BE</label>
                   <input
                     type="date"
                     value={startToBe}

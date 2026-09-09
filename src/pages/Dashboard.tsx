@@ -238,8 +238,8 @@ export default function Dashboard() {
             razaoSocial: c.razao_social,
             qtdFiliais: 1,
             dataKickoff: c.data_kickoff || null,
-            inicio: pipe1?.start_as_is || undefined,
-            fim: pipe1?.start_to_be || undefined,
+            inicio: pipe1?.start_as_is || pipe1?.datas_etapas?.['5']?.data_inicio || pipe1?.datas_etapas?.['5']?.data_fim || undefined,
+            fim: pipe1?.start_to_be || pipe1?.datas_etapas?.['7']?.data_inicio || pipe1?.datas_etapas?.['7']?.data_fim || undefined,
             status: pipe1?.status || 'iniciado',
             greenStepsTotal: greenSteps,
             maxStepsTotal: totalClientFase1Steps
@@ -255,11 +255,13 @@ export default function Dashboard() {
           if (c.data_kickoff && !groupsMap[raiz].dataKickoff) {
             groupsMap[raiz].dataKickoff = c.data_kickoff;
           }
-          if (pipe1?.start_as_is && !groupsMap[raiz].inicio) {
-            groupsMap[raiz].inicio = pipe1.start_as_is;
+          const pipeAsIs = pipe1?.start_as_is || pipe1?.datas_etapas?.['5']?.data_inicio || pipe1?.datas_etapas?.['5']?.data_fim;
+          if (pipeAsIs && !groupsMap[raiz].inicio) {
+            groupsMap[raiz].inicio = pipeAsIs;
           }
-          if (pipe1?.start_to_be && !groupsMap[raiz].fim) {
-            groupsMap[raiz].fim = pipe1.start_to_be;
+          const pipeToBe = pipe1?.start_to_be || pipe1?.datas_etapas?.['7']?.data_inicio || pipe1?.datas_etapas?.['7']?.data_fim;
+          if (pipeToBe && !groupsMap[raiz].fim) {
+            groupsMap[raiz].fim = pipeToBe;
           }
         }
       });
@@ -879,7 +881,7 @@ export default function Dashboard() {
               Timeline Resumida dos Projetos (Diagnóstico)
             </h3>
             <p className="text-xs text-slate-500 font-mono mt-0.5">
-              Alimentado por Start AS-IS e Start TO-BE do Fluxo de Trabalho
+              Alimentado por Apresentação AS-IS e Apresentação TO-BE do Fluxo de Trabalho
             </p>
           </div>
 
@@ -1026,7 +1028,7 @@ export default function Dashboard() {
                       className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <span>Start AS-IS</span>
+                        <span>Apresentação AS-IS</span>
                         {timelineSortField === 'inicio' ? (
                           timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
                         ) : (
@@ -1040,7 +1042,7 @@ export default function Dashboard() {
                       className="py-2.5 px-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors group/th"
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <span>Start TO-BE</span>
+                        <span>Apresentação TO-BE</span>
                         {timelineSortField === 'fim' ? (
                           timelineSortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-600" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-600" />
                         ) : (

@@ -7,18 +7,21 @@ export interface CompanyScheduleTabProps {
   pipeFase1?: WorkflowPipeline;
   fasesDiagnostico: WorkflowPhase[];
   onOpenDetail: (stepNum: number) => void;
+  onUpdateMilestoneDate?: (type: 'as_is' | 'to_be', dateVal: string) => void;
 }
 
 export default function CompanyScheduleTab({
   client,
   pipeFase1,
   fasesDiagnostico,
-  onOpenDetail
+  onOpenDetail,
+  onUpdateMilestoneDate
 }: CompanyScheduleTabProps) {
-  const startAsIs = pipeFase1?.start_as_is;
-  const startToBe = pipeFase1?.start_to_be;
   const datasEtapas = pipeFase1?.datas_etapas || {};
   const statusEtapas = pipeFase1?.status_etapas || {};
+
+  const startAsIs = pipeFase1?.start_as_is || datasEtapas['5']?.data_inicio || datasEtapas['5']?.data_fim;
+  const startToBe = pipeFase1?.start_to_be || datasEtapas['7']?.data_inicio || datasEtapas['7']?.data_fim;
 
   // Formatação amigável de data
   const formatDate = (dateStr?: string | null) => {
@@ -38,12 +41,19 @@ export default function CompanyScheduleTab({
     return diffDays;
   };
 
-  // Calcular total de dias do projeto (da 1ª etapa à última)
+  // Calcular total de dias do projeto (desconsiderando outorgas)
   let totalDiasProjeto = 0;
 
-  fasesDiagnostico.forEach((_, idx) => {
+  fasesDiagnostico.forEach((phaseObj, idx) => {
     const stepNum = idx + 1;
-    const dates = datasEtapas[String(stepNum)];
+    const isOutorga = phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || stepNum === 1 || stepNum === 2;
+    if (isOutorga) return;
+
+    const dates = datasEtapas[String(stepNum)] || (
+      stepNum === 5 && startAsIs ? { data_inicio: startAsIs, data_fim: null } :
+      stepNum === 7 && startToBe ? { data_inicio: startToBe, data_fim: null } :
+      undefined
+    );
     if (dates?.data_inicio && dates?.data_fim) {
       const days = calculateDays(dates.data_inicio, dates.data_fim);
       if (days !== null) {
@@ -54,38 +64,44 @@ export default function CompanyScheduleTab({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ──────── Header dos Marcos Principais (Start AS-IS & Start TO-BE) ──────── */}
+      {/* ──────── Header dos Marcos Principais (Apresentação AS-IS & Apresentação TO-BE) ──────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card Start AS-IS */}
+        {/* Card Apresentação AS-IS */}
         <div className="bg-gradient-to-br from-indigo-50/80 to-white p-4 rounded-2xl border border-indigo-100 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
               <Calendar className="w-5 h-5" />
             </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Start AS-IS (Após Outorga)
-              </span>
-              <span className="text-base font-extrabold text-indigo-950">
-                {formatDate(startAsIs)}
-              </span>
+            <div className="flex flex-col flex-1 min-w-0">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Apresentação AS-IS
+              </label>
+              <input
+                type="date"
+                value={startAsIs || ''}
+                onChange={(e) => onUpdateMilestoneDate && onUpdateMilestoneDate('as_is', e.target.value)}
+                className="text-xs font-bold text-indigo-950 bg-white border border-indigo-200 rounded-lg px-2 py-1 mt-1 focus:ring-2 focus:ring-indigo-300 outline-none cursor-pointer w-full max-w-[150px]"
+              />
             </div>
           </div>
         </div>
 
-        {/* Card Start TO-BE */}
+        {/* Card Apresentação TO-BE */}
         <div className="bg-gradient-to-br from-purple-50/80 to-white p-4 rounded-2xl border border-purple-100 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
               <Calendar className="w-5 h-5" />
             </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Start TO-BE (Após Pres. AS-IS)
-              </span>
-              <span className="text-base font-extrabold text-purple-950">
-                {formatDate(startToBe)}
-              </span>
+            <div className="flex flex-col flex-1 min-w-0">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Apresentação TO-BE
+              </label>
+              <input
+                type="date"
+                value={startToBe || ''}
+                onChange={(e) => onUpdateMilestoneDate && onUpdateMilestoneDate('to_be', e.target.value)}
+                className="text-xs font-bold text-purple-950 bg-white border border-purple-200 rounded-lg px-2 py-1 mt-1 focus:ring-2 focus:ring-purple-300 outline-none cursor-pointer w-full max-w-[150px]"
+              />
             </div>
           </div>
         </div>
@@ -139,11 +155,27 @@ export default function CompanyScheduleTab({
               {fasesDiagnostico.map((phaseObj, index) => {
                 const stepNum = index + 1;
                 const stepKey = String(stepNum);
-                const dates = datasEtapas[stepKey];
+                const isOutorga = phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || stepNum === 1 || stepNum === 2;
+                const dates = datasEtapas[stepKey] || (
+                  stepNum === 5 && startAsIs ? { data_inicio: startAsIs, data_fim: null } :
+                  stepNum === 7 && startToBe ? { data_inicio: startToBe, data_fim: null } :
+                  undefined
+                );
                 const rawSt = statusEtapas[stepKey];
-                const stStatus = rawSt ? normalizeStepStatus(rawSt) : 'pendente';
+                const normSt = rawSt ? normalizeStepStatus(rawSt) : null;
+                const f1StepNum = pipeFase1?.etapa_atual || 1;
+                const isFase1Concluido = pipeFase1?.status === 'concluido';
+                const hasDates = Boolean(dates?.data_inicio || dates?.data_fim);
+
+                const stStatus = normSt === 'na'
+                  ? 'na'
+                  : (normSt === 'concluido' || stepNum < f1StepNum || isFase1Concluido || (isOutorga && hasDates)
+                      ? 'concluido'
+                      : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'))
+                    );
+
                 const stMeta = STEP_STATUS_MAP[stStatus];
-                const days = calculateDays(dates?.data_inicio, dates?.data_fim);
+                const days = isOutorga ? null : calculateDays(dates?.data_inicio, dates?.data_fim);
 
                 return (
                   <tr key={phaseObj.id || phaseObj.key} className="hover:bg-slate-50/80 transition-colors">
@@ -156,7 +188,7 @@ export default function CompanyScheduleTab({
                       {formatDate(dates?.data_fim)}
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-indigo-700">
-                      {days !== null ? `${days} dias` : '-'}
+                      {isOutorga ? '-' : (days !== null ? `${days} dias` : '-')}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={cn(

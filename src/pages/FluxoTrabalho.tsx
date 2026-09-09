@@ -27,7 +27,8 @@ import {
   getRegimeFromSegmento,
   RegimeEnum,
   EtapaColorStatus,
-  normalizeStepStatus
+  normalizeStepStatus,
+  StepDates
 } from '../types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CompanyWorkflowCard from '../components/workflow/CompanyWorkflowCard';
@@ -429,17 +430,34 @@ export default function FluxoTrabalho() {
     setDetailModalBackupId(backupId);
 
     // Carregar datas e múltiplos responsáveis
+    const initialStartAsIs = pipe?.start_as_is || pipe?.datas_etapas?.['5']?.data_inicio || pipe?.datas_etapas?.['5']?.data_fim || '';
+    const initialStartToBe = pipe?.start_to_be || pipe?.datas_etapas?.['7']?.data_inicio || pipe?.datas_etapas?.['7']?.data_fim || '';
+
     const stepDates = pipe?.datas_etapas?.[stepKey];
-    setDetailModalStartDate(stepDates?.data_inicio || '');
-    setDetailModalEndDate(stepDates?.data_fim || '');
-    setDetailModalStartAsIs(pipe?.start_as_is || '');
-    setDetailModalStartToBe(pipe?.start_to_be || '');
+    let startDate = stepDates?.data_inicio || '';
+    let endDate = stepDates?.data_fim || '';
+
+    if (detailModalGroup === 'fase_1') {
+      if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
+      if (stepNum === 7 && !startDate) startDate = initialStartToBe;
+    }
+
+    setDetailModalStartDate(startDate);
+    setDetailModalEndDate(endDate);
+    setDetailModalStartAsIs(initialStartAsIs);
+    setDetailModalStartToBe(initialStartToBe);
     setDetailModalSelectedMemberIds(pipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
 
     const savedStatus = pipe?.status_etapas?.[stepKey];
-    const initialStatus = savedStatus
-      ? normalizeStepStatus(savedStatus)
-      : (pipe?.status === 'concluido' || (pipe?.etapa_atual || 1) > stepNum ? 'concluido' : (pipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'));
+    const normSaved = savedStatus ? normalizeStepStatus(savedStatus) : null;
+    const isOutorga = stepNum === 1 || stepNum === 2 || stepNum === 3;
+    const hasDates = Boolean(startDate || endDate);
+    const initialStatus = normSaved === 'na'
+      ? 'na'
+      : (normSaved === 'concluido' || stepNum < (pipe?.etapa_atual || 1) || pipe?.status === 'concluido' || (isOutorga && hasDates)
+          ? 'concluido'
+          : (normSaved || (pipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'))
+        );
     setDetailModalStatus(initialStatus);
 
     setDetailModalOpen(true);
@@ -472,15 +490,33 @@ export default function FluxoTrabalho() {
     setDetailModalPrincipalId(principalId);
     setDetailModalBackupId(backupId);
 
+    const initialStartAsIs = detailModalPipe?.start_as_is || detailModalPipe?.datas_etapas?.['5']?.data_inicio || detailModalPipe?.datas_etapas?.['5']?.data_fim || detailModalStartAsIs || '';
+    const initialStartToBe = detailModalPipe?.start_to_be || detailModalPipe?.datas_etapas?.['7']?.data_inicio || detailModalPipe?.datas_etapas?.['7']?.data_fim || detailModalStartToBe || '';
+
     const stepDates = detailModalPipe?.datas_etapas?.[stepKey];
-    setDetailModalStartDate(stepDates?.data_inicio || '');
-    setDetailModalEndDate(stepDates?.data_fim || '');
+    let startDate = stepDates?.data_inicio || '';
+    let endDate = stepDates?.data_fim || '';
+
+    if (detailModalGroup === 'fase_1') {
+      if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
+      if (stepNum === 7 && !startDate) startDate = initialStartToBe;
+    }
+
+    setDetailModalStartDate(startDate);
+    setDetailModalEndDate(endDate);
     setDetailModalSelectedMemberIds(detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
 
     const savedStatus = detailModalPipe?.status_etapas?.[stepKey];
-    const initialStatus = savedStatus
-      ? normalizeStepStatus(savedStatus)
-      : (detailModalPipe?.status === 'concluido' || (detailModalPipe?.etapa_atual || 1) > stepNum ? 'concluido' : (detailModalPipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'));
+    const normSavedSwitch = savedStatus ? normalizeStepStatus(savedStatus) : null;
+    const isOutorgaSwitch = stepNum === 1 || stepNum === 2 || stepNum === 3;
+    const hasDatesSwitch = Boolean(startDate || endDate);
+    const currentEtapaNum = detailModalPipe?.etapa_atual || 1;
+    const initialStatus = normSavedSwitch === 'na'
+      ? 'na'
+      : (normSavedSwitch === 'concluido' || stepNum < currentEtapaNum || detailModalPipe?.status === 'concluido' || (isOutorgaSwitch && hasDatesSwitch)
+          ? 'concluido'
+          : (normSavedSwitch || (currentEtapaNum === stepNum ? 'em_andamento' : 'pendente'))
+        );
     setDetailModalStatus(initialStatus);
   };
 
@@ -491,6 +527,45 @@ export default function FluxoTrabalho() {
       const stepKey = String(detailModalStepNum);
 
       let targetPipe = detailModalPipe;
+
+      const currentDatas = targetPipe?.datas_etapas || {};
+      const updatedDatas: Record<string, StepDates> = {
+        ...currentDatas,
+        [stepKey]: {
+          data_inicio: detailModalStartDate || null,
+          data_fim: detailModalEndDate || null
+        }
+      };
+
+      let finalStartAsIs = detailModalStartAsIs || null;
+      let finalStartToBe = detailModalStartToBe || null;
+
+      if (detailModalGroup === 'fase_1') {
+        if (detailModalStepNum === 5 && detailModalStartDate) {
+          finalStartAsIs = detailModalStartDate;
+        } else if (!finalStartAsIs && updatedDatas['5']?.data_inicio) {
+          finalStartAsIs = updatedDatas['5'].data_inicio;
+        }
+
+        if (detailModalStepNum === 7 && detailModalStartDate) {
+          finalStartToBe = detailModalStartDate;
+        } else if (!finalStartToBe && updatedDatas['7']?.data_inicio) {
+          finalStartToBe = updatedDatas['7'].data_inicio;
+        }
+
+        if (finalStartAsIs) {
+          updatedDatas['5'] = {
+            data_inicio: updatedDatas['5']?.data_inicio || finalStartAsIs,
+            data_fim: updatedDatas['5']?.data_fim || null
+          };
+        }
+        if (finalStartToBe) {
+          updatedDatas['7'] = {
+            data_inicio: updatedDatas['7']?.data_inicio || finalStartToBe,
+            data_fim: updatedDatas['7']?.data_fim || null
+          };
+        }
+      }
 
       if (!targetPipe) {
         const { data: newPipe, error: insErr } = await supabase
@@ -510,14 +585,9 @@ export default function FluxoTrabalho() {
                 backup_id: detailModalBackupId || null
               }
             },
-            datas_etapas: {
-              [stepKey]: {
-                data_inicio: detailModalStartDate || null,
-                data_fim: detailModalEndDate || null
-              }
-            },
-            start_as_is: detailModalStartAsIs || null,
-            start_to_be: detailModalStartToBe || null,
+            datas_etapas: updatedDatas,
+            start_as_is: finalStartAsIs,
+            start_to_be: finalStartToBe,
             responsaveis_multiplos_etapas: {
               [stepKey]: detailModalSelectedMemberIds
             },
@@ -546,15 +616,6 @@ export default function FluxoTrabalho() {
           }
         };
 
-        const currentDatas = targetPipe.datas_etapas || {};
-        const updatedDatas = {
-          ...currentDatas,
-          [stepKey]: {
-            data_inicio: detailModalStartDate || null,
-            data_fim: detailModalEndDate || null
-          }
-        };
-
         const currentMultiples = targetPipe.responsaveis_multiplos_etapas || {};
         const updatedMultiples = {
           ...currentMultiples,
@@ -574,8 +635,8 @@ export default function FluxoTrabalho() {
             observacoes_etapas: updatedNotes,
             responsaveis_etapas: updatedResps,
             datas_etapas: updatedDatas,
-            start_as_is: detailModalStartAsIs || null,
-            start_to_be: detailModalStartToBe || null,
+            start_as_is: finalStartAsIs,
+            start_to_be: finalStartToBe,
             responsaveis_multiplos_etapas: updatedMultiples,
             status_etapas: updatedStatuses,
             caminho_rede: detailModalStepNum === 1 ? detailModalPath : (targetPipe.caminho_rede || detailModalPath),
@@ -692,6 +753,70 @@ export default function FluxoTrabalho() {
       fetchData(true);
     } catch (err: unknown) {
       console.error('Erro ao alternar fase desabilitada:', err);
+    }
+  };
+
+  // Atualizar Datas dos Marcos Apresentação AS-IS e TO-BE diretamente (Aba Cronograma)
+  const handleUpdateMilestoneDate = async (client: Client, milestoneType: 'as_is' | 'to_be', dateVal: string) => {
+    try {
+      const existingPipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
+
+      const newStartAsIs = milestoneType === 'as_is' ? (dateVal || null) : (existingPipe?.start_as_is || null);
+      const newStartToBe = milestoneType === 'to_be' ? (dateVal || null) : (existingPipe?.start_to_be || null);
+
+      const currentDatas = existingPipe?.datas_etapas || {};
+      const updatedDatas: Record<string, StepDates> = { ...currentDatas };
+
+      if (newStartAsIs) {
+        updatedDatas['5'] = {
+          data_inicio: newStartAsIs,
+          data_fim: updatedDatas['5']?.data_fim || null
+        };
+      }
+      if (newStartToBe) {
+        updatedDatas['7'] = {
+          data_inicio: newStartToBe,
+          data_fim: updatedDatas['7']?.data_fim || null
+        };
+      }
+
+      if (!existingPipe) {
+        const { error: insErr } = await supabase
+          .from('workflow_pipelines')
+          .insert({
+            client_id: client.id,
+            fase_grupo: 'fase_1',
+            etapa_atual: 1,
+            status: 'em_andamento',
+            datas_etapas: updatedDatas,
+            start_as_is: newStartAsIs,
+            start_to_be: newStartToBe
+          });
+        if (insErr) throw insErr;
+      } else {
+        const { error: upErr } = await supabase
+          .from('workflow_pipelines')
+          .update({
+            start_as_is: newStartAsIs,
+            start_to_be: newStartToBe,
+            datas_etapas: updatedDatas,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingPipe.id);
+        if (upErr) throw upErr;
+      }
+
+      await logActivity({
+        titulo: 'Data do Marco Atualizada',
+        descricao: `Data de ${milestoneType === 'as_is' ? 'Apresentação AS-IS' : 'Apresentação TO-BE'} atualizada para ${client.razao_social}`,
+        tipo_log: 'info',
+        client_id: client.id,
+        usuario_nome: getUserName()
+      });
+
+      fetchData(true);
+    } catch (err: unknown) {
+      console.error('Erro ao atualizar data do marco:', err);
     }
   };
 
@@ -902,6 +1027,7 @@ export default function FluxoTrabalho() {
                 onTogglePhaseDisabled={handleTogglePhaseDisabled}
                 onUpdateStepStatus={handleUpdateStepStatus}
                 onSavePeriodoEscopo={handleSavePeriodoEscopo}
+                onUpdateMilestoneDate={handleUpdateMilestoneDate}
               />
             );
           })}

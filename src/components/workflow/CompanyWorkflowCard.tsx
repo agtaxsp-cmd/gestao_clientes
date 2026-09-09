@@ -27,6 +27,7 @@ export interface CompanyWorkflowCardProps {
   onTogglePhaseDisabled?: (client: Client, grupo: 'fase_2' | 'fase_3', disabled: boolean) => void;
   onUpdateStepStatus?: (client: Client, stepNum: number, newStatus: EtapaColorStatus) => void;
   onSavePeriodoEscopo?: (client: Client, periodo: string) => void;
+  onUpdateMilestoneDate?: (client: Client, type: 'as_is' | 'to_be', dateVal: string) => void;
 }
 
 export default function CompanyWorkflowCard({
@@ -47,7 +48,8 @@ export default function CompanyWorkflowCard({
   onOpenAnalytic,
   onTogglePhaseDisabled,
   onUpdateStepStatus,
-  onSavePeriodoEscopo
+  onSavePeriodoEscopo,
+  onUpdateMilestoneDate
 }: CompanyWorkflowCardProps) {
   const [internalTab, setInternalTab] = useState<FaseTabEnum>('fase_1');
   const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalTab;
@@ -384,6 +386,7 @@ export default function CompanyWorkflowCard({
             pipeFase1={pipeFase1}
             fasesDiagnostico={fasesDiagnostico}
             onOpenDetail={(stepNum) => onOpenDetail(client, 'fase_1', stepNum, null)}
+            onUpdateMilestoneDate={(type, dateVal) => onUpdateMilestoneDate && onUpdateMilestoneDate(client, type, dateVal)}
           />
         )}
       </div>
