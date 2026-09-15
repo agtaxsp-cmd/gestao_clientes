@@ -84,9 +84,9 @@ export default function CentralTarefas() {
         if (t.client_id !== selectedClient) return false;
       }
 
-      // Filtro Responsável
+      // Filtro Responsável (Execução ou Revisão)
       if (selectedMember !== 'todos') {
-        if (t.responsavel_id !== selectedMember) return false;
+        if (t.responsavel_id !== selectedMember && t.responsavel_revisao_id !== selectedMember) return false;
       }
 
       // Filtro Criticidade GUT
@@ -130,6 +130,7 @@ export default function CentralTarefas() {
     descricao?: string | null;
     client_id?: string | null;
     responsavel_id?: string | null;
+    responsavel_revisao_id?: string | null;
     status: CentralTarefaStatus;
     gravidade: number;
     urgencia: number;

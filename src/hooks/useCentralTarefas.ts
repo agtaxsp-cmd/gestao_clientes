@@ -19,7 +19,8 @@ export function useCentralTarefas() {
         .select(`
           *,
           client:clients(*),
-          responsavel:team_members(*)
+          responsavel:team_members!responsavel_id(*),
+          responsavel_revisao:team_members!responsavel_revisao_id(*)
         `)
         .order('gut_score', { ascending: false })
         .order('urgencia', { ascending: false })
@@ -46,6 +47,7 @@ export function useCentralTarefas() {
     descricao?: string | null;
     client_id?: string | null;
     responsavel_id?: string | null;
+    responsavel_revisao_id?: string | null;
     status?: CentralTarefaStatus;
     gravidade: number;
     urgencia: number;
@@ -65,6 +67,7 @@ export function useCentralTarefas() {
           descricao: payload.descricao ? payload.descricao.trim() : null,
           client_id: payload.client_id || null,
           responsavel_id: payload.responsavel_id || null,
+          responsavel_revisao_id: payload.responsavel_revisao_id || null,
           status: payload.status || 'todo',
           gravidade,
           urgencia,
@@ -74,7 +77,8 @@ export function useCentralTarefas() {
         .select(`
           *,
           client:clients(*),
-          responsavel:team_members(*)
+          responsavel:team_members!responsavel_id(*),
+          responsavel_revisao:team_members!responsavel_revisao_id(*)
         `)
         .single();
 
@@ -132,9 +136,11 @@ export function useCentralTarefas() {
       if (upErr) throw upErr;
 
       if (target) {
+        const fromLabel = STATUS_NAME_MAP[target.status];
+        const toLabel = STATUS_NAME_MAP[newStatus];
         await logActivity({
-          titulo: 'Movimentação na Central de Tarefas',
-          descricao: `Tarefa "${target.titulo}" movida de "${STATUS_NAME_MAP[target.status]}" para "${STATUS_NAME_MAP[newStatus]}"`,
+          titulo: 'Status de Tarefa Alterado',
+          descricao: `Tarefa "${target.titulo}" movida de [${fromLabel}] para [${toLabel}]`,
           tipo_log: 'info',
           client_id: target.client_id
         });
@@ -153,6 +159,7 @@ export function useCentralTarefas() {
     descricao?: string | null;
     client_id?: string | null;
     responsavel_id?: string | null;
+    responsavel_revisao_id?: string | null;
     status?: CentralTarefaStatus;
     gravidade?: number;
     urgencia?: number;
@@ -178,7 +185,8 @@ export function useCentralTarefas() {
         .select(`
           *,
           client:clients(*),
-          responsavel:team_members(*)
+          responsavel:team_members!responsavel_id(*),
+          responsavel_revisao:team_members!responsavel_revisao_id(*)
         `)
         .single();
 

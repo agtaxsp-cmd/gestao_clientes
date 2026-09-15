@@ -124,24 +124,56 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
                     )}
                   </td>
 
-                  {/* Responsável */}
+                  {/* Responsáveis (Execução & Revisão) */}
                   <td className="px-4 py-3.5">
-                    {tarefa.responsavel ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className={cn(
-                          "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0",
-                          tarefa.responsavel.ui_color_bg || "bg-indigo-100",
-                          tarefa.responsavel.ui_color_text || "text-indigo-800"
-                        )}>
-                          {tarefa.responsavel.iniciais || tarefa.responsavel.nome.slice(0, 2).toUpperCase()}
+                    <div className="flex flex-col gap-1">
+                      {/* Execução */}
+                      {tarefa.responsavel ? (
+                        <div className="flex items-center gap-1.5" title={`Execução: ${tarefa.responsavel.nome}`}>
+                          <div className={cn(
+                            "w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black shrink-0",
+                            tarefa.status === 'in_review' ? "bg-slate-200 text-slate-500" : (tarefa.responsavel.ui_color_bg || "bg-indigo-100"),
+                            tarefa.status === 'in_review' ? "" : (tarefa.responsavel.ui_color_text || "text-indigo-800")
+                          )}>
+                            {tarefa.responsavel.iniciais || tarefa.responsavel.nome.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className={cn(
+                            "text-[11px] truncate",
+                            tarefa.status === 'in_review' ? "line-through text-slate-400 font-normal" : "font-semibold text-slate-800"
+                          )}>
+                            {tarefa.responsavel.nome}
+                          </span>
                         </div>
-                        <span className="text-[11px] font-medium text-slate-700 truncate">
-                          {tarefa.responsavel.nome}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 italic text-[11px]">Não atribuído</span>
-                    )}
+                      ) : (
+                        <span className="text-slate-400 italic text-[10px]">Sem Executor</span>
+                      )}
+
+                      {/* Revisão */}
+                      {tarefa.responsavel_revisao ? (
+                        <div className="flex items-center gap-1.5" title={`Revisão: ${tarefa.responsavel_revisao.nome}`}>
+                          <div className={cn(
+                            "w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black shrink-0",
+                            tarefa.status === 'in_review' ? "bg-purple-600 text-white" : (tarefa.responsavel_revisao.ui_color_bg || "bg-purple-100"),
+                            tarefa.status === 'in_review' ? "" : (tarefa.responsavel_revisao.ui_color_text || "text-purple-800")
+                          )}>
+                            {tarefa.responsavel_revisao.iniciais || tarefa.responsavel_revisao.nome.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className={cn(
+                            "text-[10px] truncate",
+                            tarefa.status === 'in_review' ? "font-bold text-purple-900 bg-purple-50 px-1 rounded" : "text-slate-500 font-medium"
+                          )}>
+                            <span className="text-[8px] text-purple-600 uppercase font-black mr-0.5">Rev:</span>
+                            {tarefa.responsavel_revisao.nome}
+                          </span>
+                        </div>
+                      ) : (
+                        tarefa.status === 'in_review' && (
+                          <span className="text-[9px] text-amber-700 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 inline-block w-max">
+                            Sem Revisor
+                          </span>
+                        )
+                      )}
+                    </div>
                   </td>
 
                   {/* Status */}

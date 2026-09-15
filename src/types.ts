@@ -306,7 +306,8 @@ export interface CentralTarefa {
   titulo: string;
   descricao?: string | null;
   client_id?: string | null;
-  responsavel_id?: string | null;
+  responsavel_id?: string | null; // Responsável Execução
+  responsavel_revisao_id?: string | null; // Responsável Revisão
   status: CentralTarefaStatus;
   gravidade: number; // 1 a 5
   urgencia: number;  // 1 a 5
@@ -318,6 +319,7 @@ export interface CentralTarefa {
   
   // Relações opcionais (JOIN)
   client?: Client;
-  responsavel?: TeamMember;
+  responsavel?: TeamMember; // Responsável Execução
+  responsavel_revisao?: TeamMember; // Responsável Revisão
 }
 

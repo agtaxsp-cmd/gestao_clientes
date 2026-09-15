@@ -213,35 +213,67 @@ export default function TarefaCard({ tarefa, onEdit, onDelete, onMoveStatus }: T
         )}
       </div>
 
-      {/* Footer: Responsável e Detalhes GUT */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
-        {/* Responsável */}
-        <div className="flex items-center gap-2 min-w-0">
-          {tarefa.responsavel ? (
-            <div className="flex items-center gap-1.5 min-w-0" title={tarefa.responsavel.nome}>
-              <div className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0",
-                tarefa.responsavel.ui_color_bg || "bg-indigo-100",
-                tarefa.responsavel.ui_color_text || "text-indigo-800"
-              )}>
-                {tarefa.responsavel.iniciais || tarefa.responsavel.nome.slice(0, 2).toUpperCase()}
+      {/* Footer: Responsáveis (Execução & Revisão) e Detalhes GUT */}
+      <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 text-[11px]">
+        <div className="flex items-center justify-between gap-2 min-w-0 flex-wrap">
+          {/* Responsável Execução */}
+          <div className="flex items-center gap-1.5 min-w-0" title={`Responsável Execução: ${tarefa.responsavel?.nome || 'Não atribuído'}`}>
+            {tarefa.responsavel ? (
+              <>
+                <div className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 transition-opacity",
+                  tarefa.status === 'in_review' ? "bg-slate-200 text-slate-500 opacity-60" : (tarefa.responsavel.ui_color_bg || "bg-indigo-100"),
+                  tarefa.status === 'in_review' ? "" : (tarefa.responsavel.ui_color_text || "text-indigo-800")
+                )}>
+                  {tarefa.responsavel.iniciais || tarefa.responsavel.nome.slice(0, 2).toUpperCase()}
+                </div>
+                <span className={cn(
+                  "text-[11px] truncate",
+                  tarefa.status === 'in_review' ? "line-through text-slate-400 font-normal opacity-70" : "font-medium text-slate-700"
+                )}>
+                  {tarefa.responsavel.nome}
+                </span>
+              </>
+            ) : (
+              <div className="flex items-center gap-1 text-slate-400 text-[10px]">
+                <User className="w-3.5 h-3.5" />
+                <span>Sem Executor</span>
               </div>
-              <span className="text-[11px] font-medium text-slate-700 truncate">
-                {tarefa.responsavel.nome}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-slate-400 text-[10px]">
-              <User className="w-3.5 h-3.5" />
-              <span>Não atribuído</span>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* Indicador de Notas G·U·T */}
+          <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+            G{tarefa.gravidade}·U{tarefa.urgencia}·T{tarefa.tendencia}
+          </span>
         </div>
 
-        {/* Indicador de Notas G·U·T */}
-        <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-          G{tarefa.gravidade}·U{tarefa.urgencia}·T{tarefa.tendencia}
-        </span>
+        {/* Responsável Revisão */}
+        {tarefa.responsavel_revisao ? (
+          <div className="flex items-center gap-1.5 min-w-0 pt-0.5" title={`Responsável Revisão: ${tarefa.responsavel_revisao.nome}`}>
+            <div className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0",
+              tarefa.status === 'in_review' ? "bg-purple-600 text-white shadow-xs" : (tarefa.responsavel_revisao.ui_color_bg || "bg-purple-100"),
+              tarefa.status === 'in_review' ? "" : (tarefa.responsavel_revisao.ui_color_text || "text-purple-800")
+            )}>
+              {tarefa.responsavel_revisao.iniciais || tarefa.responsavel_revisao.nome.slice(0, 2).toUpperCase()}
+            </div>
+            <div className={cn(
+              "flex items-center gap-1 min-w-0 text-[11px]",
+              tarefa.status === 'in_review' ? "font-bold text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/80" : "text-slate-600 font-medium"
+            )}>
+              <span className="text-[9px] uppercase tracking-wider text-purple-600 font-black">Rev:</span>
+              <span className="truncate">{tarefa.responsavel_revisao.nome}</span>
+            </div>
+          </div>
+        ) : (
+          tarefa.status === 'in_review' && (
+            <div className="flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50/90 px-2 py-0.5 rounded-lg border border-amber-200 font-semibold">
+              <User className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>Sem revisor atribuído</span>
+            </div>
+          )
+        )}
       </div>
     </div>
   );

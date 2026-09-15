@@ -13,6 +13,7 @@ interface NovaTarefaModalProps {
     descricao?: string | null;
     client_id?: string | null;
     responsavel_id?: string | null;
+    responsavel_revisao_id?: string | null;
     status: CentralTarefaStatus;
     gravidade: number;
     urgencia: number;
@@ -38,6 +39,7 @@ export default function NovaTarefaModal({
   const [descricao, setDescricao] = useState('');
   const [clientId, setClientId] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
+  const [responsavelRevisaoId, setResponsavelRevisaoId] = useState('');
   const [status, setStatus] = useState<CentralTarefaStatus>(initialStatus);
   const [gravidade, setGravidade] = useState(3);
   const [urgencia, setUrgencia] = useState(3);
@@ -52,6 +54,7 @@ export default function NovaTarefaModal({
       setDescricao(tarefaToEdit.descricao || '');
       setClientId(tarefaToEdit.client_id || '');
       setResponsavelId(tarefaToEdit.responsavel_id || '');
+      setResponsavelRevisaoId(tarefaToEdit.responsavel_revisao_id || '');
       setStatus(tarefaToEdit.status);
       setGravidade(tarefaToEdit.gravidade || 3);
       setUrgencia(tarefaToEdit.urgencia || 3);
@@ -62,6 +65,7 @@ export default function NovaTarefaModal({
       setDescricao('');
       setClientId('');
       setResponsavelId('');
+      setResponsavelRevisaoId('');
       setStatus(initialStatus);
       setGravidade(3);
       setUrgencia(3);
@@ -94,6 +98,7 @@ export default function NovaTarefaModal({
         descricao: descricao.trim() || null,
         client_id: clientId || null,
         responsavel_id: responsavelId || null,
+        responsavel_revisao_id: responsavelRevisaoId || null,
         status,
         gravidade,
         urgencia,
@@ -210,38 +215,58 @@ export default function NovaTarefaModal({
             />
           </div>
 
-          {/* Relacionamentos (Cliente e Responsável) */}
+          {/* Relacionamento Empresa Cliente */}
+          <div>
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              Empresa Cliente
+            </label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="w-full h-10 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer text-slate-800"
+            >
+              <option value="">Nenhum (Demanda interna / Geral)</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.razao_social}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Atribuição de Responsáveis (Execução e Revisão) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Empresa / Cliente */}
+            {/* Responsável Execução */}
             <div>
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                Empresa Cliente
+                <User className="w-3.5 h-3.5 text-indigo-500" />
+                Responsável Execução
               </label>
               <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="w-full h-10 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer text-slate-800"
+                value={responsavelId}
+                onChange={(e) => setResponsavelId(e.target.value)}
+                className="w-full h-10 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer text-slate-800 font-medium"
               >
-                <option value="">Nenhum (Demanda interna / Geral)</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.razao_social}
+                <option value="">Não atribuído</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome} ({m.cargo})
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Responsável */}
+            {/* Responsável Revisão */}
             <div>
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                <User className="w-3.5 h-3.5 text-slate-400" />
-                Responsável
+                <User className="w-3.5 h-3.5 text-purple-500" />
+                Responsável Revisão
               </label>
               <select
-                value={responsavelId}
-                onChange={(e) => setResponsavelId(e.target.value)}
-                className="w-full h-10 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer text-slate-800"
+                value={responsavelRevisaoId}
+                onChange={(e) => setResponsavelRevisaoId(e.target.value)}
+                className="w-full h-10 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer text-slate-800 font-medium"
               >
                 <option value="">Não atribuído</option>
                 {members.map(m => (
