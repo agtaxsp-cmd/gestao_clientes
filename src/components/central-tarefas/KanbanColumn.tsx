@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CentralTarefa, CentralTarefaStatus } from '../../types';
 import TarefaCard from './TarefaCard';
-import { Plus, Inbox, Clock, PlayCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, Inbox, Clock, PlayCircle, FileCheck, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface KanbanColumnProps {
@@ -45,6 +45,14 @@ const COLUMN_CONFIG: Record<CentralTarefaStatus, {
     badgeText: 'text-amber-800',
     borderColor: 'border-amber-100',
     icon: PlayCircle
+  },
+  in_review: {
+    color: 'text-purple-700',
+    headerBg: 'bg-purple-50/70',
+    badgeBg: 'bg-purple-100',
+    badgeText: 'text-purple-800',
+    borderColor: 'border-purple-100',
+    icon: FileCheck
   },
   done: {
     color: 'text-emerald-700',

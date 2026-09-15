@@ -297,7 +297,7 @@ export interface ActivityLog {
 // ==========================================
 // CENTRAL TAREFAS & MATRIZ GUT
 // ==========================================
-export type CentralTarefaStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+export type CentralTarefaStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done';
 
 export type GutCriticityLevel = 'baixa' | 'media' | 'alta' | 'critica';
 

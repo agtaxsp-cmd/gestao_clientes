@@ -107,6 +107,7 @@ export function useCentralTarefas() {
     backlog: 'Backlog',
     todo: 'A Fazer',
     in_progress: 'Em Andamento',
+    in_review: 'Revisão',
     done: 'Concluído'
   };
 

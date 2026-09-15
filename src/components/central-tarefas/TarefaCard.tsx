@@ -33,7 +33,8 @@ export default function TarefaCard({ tarefa, onEdit, onDelete, onMoveStatus }: T
   const nextStatusMap: Record<CentralTarefaStatus, { label: string; next: CentralTarefaStatus } | null> = {
     backlog: { label: 'Mover para A Fazer', next: 'todo' },
     todo: { label: 'Iniciar Tarefa', next: 'in_progress' },
-    in_progress: { label: 'Concluir Tarefa', next: 'done' },
+    in_progress: { label: 'Enviar para Revisão', next: 'in_review' },
+    in_review: { label: 'Concluir Tarefa', next: 'done' },
     done: null
   };
 

@@ -106,10 +106,11 @@ export default function CentralTarefas() {
     const total = tarefas.length;
     const criticas = tarefas.filter(t => t.gut_score >= 80 && t.status !== 'done').length;
     const emAndamento = tarefas.filter(t => t.status === 'in_progress').length;
+    const emRevisao = tarefas.filter(t => t.status === 'in_review').length;
     const aFazer = tarefas.filter(t => t.status === 'todo').length;
     const concluidas = tarefas.filter(t => t.status === 'done').length;
 
-    return { total, criticas, emAndamento, aFazer, concluidas };
+    return { total, criticas, emAndamento, emRevisao, aFazer, concluidas };
   }, [tarefas]);
 
   const handleOpenCreateModal = (initialColStatus: CentralTarefaStatus = 'todo') => {
@@ -143,35 +144,27 @@ export default function CentralTarefas() {
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-12">
-      {/* ──────── Header Superior com Gradiente Moderno (Idêntico ao Cliente Recorrente) ──────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden border border-slate-800">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-16 w-60 h-60 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 bg-slate-50 min-h-screen">
+      {/* ──────── Header com Estatísticas ──────── */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-900/30 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(99,102,241,0.15),transparent_70%)] pointer-events-none" />
 
-        {/* Lado Esquerdo: Ícone + Título + Descrição */}
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
-            <KanbanSquare className="w-7 h-7" />
+        <div className="flex flex-col gap-2 relative z-10">
+          <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs tracking-wider uppercase">
+            <LayoutGrid className="w-4 h-4" />
+            <span>Gestão Priorizada de Demandas</span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 uppercase tracking-wider">
-                Matriz GUT & Kanban
-              </span>
-            </div>
-            <h1 className="text-2xl font-black text-white mt-1 tracking-tight">
-              Central de Tarefas
-            </h1>
-            <p className="text-xs text-indigo-100/80 mt-1 max-w-xl">
-              Priorização inteligente via <strong>Matriz GUT</strong> (Gravidade × Urgência × Tendência) e gestão visual das demandas.
-            </p>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            Central de Tarefas
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-xl font-medium leading-relaxed">
+            Organize fluxos operacionais, priorize demandas pelo Score GUT (Gravidade × Urgência × Tendência) e acompanhe o Kanban em tempo real.
+          </p>
         </div>
 
         {/* Lado Direito: Métricas Rápidas & Controles */}
         <div className="flex flex-col gap-2.5 relative z-10 shrink-0">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
             {/* Metric 1: Total */}
             <div className="flex flex-col">
               <span className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Tarefas</span>
@@ -196,7 +189,14 @@ export default function CentralTarefas() {
               <span className="text-[10px] text-amber-300/80">{stats.aFazer} a fazer</span>
             </div>
 
-            {/* Metric 4: Concluídas */}
+            {/* Metric 4: Revisão */}
+            <div className="flex flex-col border-l border-white/10 pl-3">
+              <span className="text-[10px] uppercase font-bold text-purple-300 tracking-wider">Revisão</span>
+              <span className="text-xl font-black text-purple-200 mt-0.5">{stats.emRevisao}</span>
+              <span className="text-[10px] text-purple-300/80">Em validação</span>
+            </div>
+
+            {/* Metric 5: Concluídas */}
             <div className="flex flex-col border-l border-white/10 pl-3">
               <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">Concluídas</span>
               <span className="text-xl font-black text-emerald-300 mt-0.5">{stats.concluidas}</span>
@@ -336,8 +336,8 @@ export default function CentralTarefas() {
           <span>Erro ao carregar tarefas: {error}</span>
         </div>
       ) : viewMode === 'kanban' ? (
-        /* Visão Quadro Kanban (4 colunas) */
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+        /* Visão Quadro Kanban (5 colunas) */
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 items-start">
           <KanbanColumn
             status="backlog"
             title="Backlog"
@@ -366,6 +366,16 @@ export default function CentralTarefas() {
             onEdit={handleOpenEditModal}
             onDelete={deleteTarefa}
             onAddNew={() => handleOpenCreateModal('in_progress')}
+          />
+
+          <KanbanColumn
+            status="in_review"
+            title="Revisão"
+            tarefas={filteredTarefas.filter(t => t.status === 'in_review')}
+            onMoveStatus={updateStatus}
+            onEdit={handleOpenEditModal}
+            onDelete={deleteTarefa}
+            onAddNew={() => handleOpenCreateModal('in_review')}
           />
 
           <KanbanColumn

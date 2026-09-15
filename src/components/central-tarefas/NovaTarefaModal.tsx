@@ -267,6 +267,7 @@ export default function NovaTarefaModal({
                 <option value="backlog">Backlog</option>
                 <option value="todo">A Fazer</option>
                 <option value="in_progress">Em Andamento</option>
+                <option value="in_review">Revisão</option>
                 <option value="done">Concluído</option>
               </select>
             </div>
