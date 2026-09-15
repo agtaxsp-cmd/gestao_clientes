@@ -293,3 +293,31 @@ export interface ActivityLog {
   created_at: string;
   clients?: Client;
 }
+
+// ==========================================
+// CENTRAL TAREFAS & MATRIZ GUT
+// ==========================================
+export type CentralTarefaStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+
+export type GutCriticityLevel = 'baixa' | 'media' | 'alta' | 'critica';
+
+export interface CentralTarefa {
+  id: string;
+  titulo: string;
+  descricao?: string | null;
+  client_id?: string | null;
+  responsavel_id?: string | null;
+  status: CentralTarefaStatus;
+  gravidade: number; // 1 a 5
+  urgencia: number;  // 1 a 5
+  tendencia: number; // 1 a 5
+  gut_score: number; // gravidade * urgencia * tendencia (1 a 125)
+  data_vencimento?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Relações opcionais (JOIN)
+  client?: Client;
+  responsavel?: TeamMember;
+}
+

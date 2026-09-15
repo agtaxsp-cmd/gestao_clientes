@@ -1,17 +1,138 @@
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, ArrowRight } from 'lucide-react';
 import { Client, WorkflowPipeline, WorkflowPhase, normalizeStepStatus, STEP_STATUS_MAP } from '../../types';
 import { cn } from '../../lib/utils';
 
 export interface CompanyScheduleTabProps {
   client: Client;
+  selectedYear?: number;
   pipeFase1?: WorkflowPipeline;
   fasesDiagnostico: WorkflowPhase[];
   onOpenDetail: (stepNum: number) => void;
   onUpdateMilestoneDate?: (type: 'as_is' | 'to_be', dateVal: string) => void;
 }
 
+interface MilestoneDateInputProps {
+  label: string;
+  value?: string | null;
+  selectedYear: number;
+  theme: 'indigo' | 'purple';
+  onChange: (val: string) => void;
+}
+
+function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: MilestoneDateInputProps) {
+  const normalizeDate = (val?: string | null): string => {
+    if (!val) return '';
+    const parts = val.split('-');
+    if (parts.length === 3) {
+      const y = Number(parts[0]);
+      if (isNaN(y) || y < 1900 || y !== selectedYear) {
+        return `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    return val;
+  };
+
+  const [localVal, setLocalVal] = useState<string>(() => normalizeDate(value));
+
+  useEffect(() => {
+    setLocalVal(normalizeDate(value));
+  }, [value, selectedYear]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value;
+    setLocalVal(newVal);
+
+    if (!newVal) {
+      onChange('');
+      return;
+    }
+
+    const parts = newVal.split('-');
+    if (parts.length === 3) {
+      const y = Number(parts[0]);
+      // Se o ano for completo (4 dígitos) e respeitar o selectedYear, salva de imediato
+      if (parts[0].length === 4 && y === selectedYear) {
+        onChange(newVal);
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (!localVal) {
+      if (value) onChange('');
+      return;
+    }
+    const parts = localVal.split('-');
+    if (parts.length === 3) {
+      const clean = `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      setLocalVal(clean);
+      if (clean !== value) {
+        onChange(clean);
+      }
+    }
+  };
+
+  const minDate = `${selectedYear}-01-01`;
+  const maxDate = `${selectedYear}-12-31`;
+  const isIndigo = theme === 'indigo';
+
+  return (
+    <div className={cn(
+      "p-4 rounded-2xl border flex items-center justify-between shadow-2xs",
+      isIndigo
+        ? "bg-gradient-to-br from-indigo-50/80 to-white border-indigo-100"
+        : "bg-gradient-to-br from-purple-50/80 to-white border-purple-100"
+    )}>
+      <div className="flex items-center gap-3 w-full">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0",
+          isIndigo ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"
+        )}>
+          <Calendar className="w-5 h-5" />
+        </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              {label} ({selectedYear})
+            </label>
+            {localVal && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalVal('');
+                  onChange('');
+                }}
+                className="text-[10px] text-slate-400 hover:text-rose-600 transition-colors font-semibold"
+                title="Limpar data"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <input
+            type="date"
+            min={minDate}
+            max={maxDate}
+            value={localVal}
+            onChange={handleInputChange}
+            onBlur={handleBlur}
+            className={cn(
+              "text-xs font-bold bg-white border rounded-lg px-2 py-1 mt-1 outline-none cursor-pointer w-full max-w-[150px]",
+              isIndigo
+                ? "text-indigo-950 border-indigo-200 focus:ring-2 focus:ring-indigo-300"
+                : "text-purple-950 border-purple-200 focus:ring-2 focus:ring-purple-300"
+            )}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CompanyScheduleTab({
   client,
+  selectedYear = new Date().getFullYear(),
   pipeFase1,
   fasesDiagnostico,
   onOpenDetail,
@@ -69,44 +190,22 @@ export default function CompanyScheduleTab({
       {/* ──────── Header dos Marcos Principais (Apresentação AS-IS & Apresentação TO-BE) ──────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card Apresentação AS-IS */}
-        <div className="bg-gradient-to-br from-indigo-50/80 to-white p-4 rounded-2xl border border-indigo-100 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3 w-full">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col flex-1 min-w-0">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Apresentação AS-IS
-              </label>
-              <input
-                type="date"
-                value={startAsIs || ''}
-                onChange={(e) => onUpdateMilestoneDate && onUpdateMilestoneDate('as_is', e.target.value)}
-                className="text-xs font-bold text-indigo-950 bg-white border border-indigo-200 rounded-lg px-2 py-1 mt-1 focus:ring-2 focus:ring-indigo-300 outline-none cursor-pointer w-full max-w-[150px]"
-              />
-            </div>
-          </div>
-        </div>
+        <MilestoneDateInput
+          label="Apresentação AS-IS"
+          value={startAsIs}
+          selectedYear={selectedYear}
+          theme="indigo"
+          onChange={(val) => onUpdateMilestoneDate && onUpdateMilestoneDate('as_is', val)}
+        />
 
         {/* Card Apresentação TO-BE */}
-        <div className="bg-gradient-to-br from-purple-50/80 to-white p-4 rounded-2xl border border-purple-100 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3 w-full">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col flex-1 min-w-0">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Apresentação TO-BE
-              </label>
-              <input
-                type="date"
-                value={startToBe || ''}
-                onChange={(e) => onUpdateMilestoneDate && onUpdateMilestoneDate('to_be', e.target.value)}
-                className="text-xs font-bold text-purple-950 bg-white border border-purple-200 rounded-lg px-2 py-1 mt-1 focus:ring-2 focus:ring-purple-300 outline-none cursor-pointer w-full max-w-[150px]"
-              />
-            </div>
-          </div>
-        </div>
+        <MilestoneDateInput
+          label="Apresentação TO-BE"
+          value={startToBe}
+          selectedYear={selectedYear}
+          theme="purple"
+          onChange={(val) => onUpdateMilestoneDate && onUpdateMilestoneDate('to_be', val)}
+        />
 
         {/* Card Total de Dias Planejados */}
         <div className="bg-gradient-to-br from-emerald-50/80 to-white p-4 rounded-2xl border border-emerald-100 flex items-center justify-between shadow-2xs">

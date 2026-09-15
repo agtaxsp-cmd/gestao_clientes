@@ -79,6 +79,21 @@ export default function FluxoTrabalho() {
   // Modal Visão Analítica Completa (Deep Dive)
   const [analyticClient, setAnalyticClient] = useState<Client | null>(null);
 
+  // Sanitizar data para o ano do banner
+  const sanitizeDateYear = (d?: string | null, targetYear = selectedYear): string | null => {
+    if (!d) return null;
+    const trimmed = d.trim();
+    if (!trimmed) return null;
+    const parts = trimmed.split('-');
+    if (parts.length === 3) {
+      const y = Number(parts[0]);
+      if (isNaN(y) || y < 1900 || y !== targetYear) {
+        return `${targetYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    return trimmed;
+  };
+
   // ────────────────────────────────────────────────
   // Fetch de dados
   // ────────────────────────────────────────────────
@@ -430,12 +445,12 @@ export default function FluxoTrabalho() {
     setDetailModalBackupId(backupId);
 
     // Carregar datas e múltiplos responsáveis
-    const initialStartAsIs = pipe?.start_as_is || pipe?.datas_etapas?.['5']?.data_inicio || pipe?.datas_etapas?.['5']?.data_fim || '';
-    const initialStartToBe = pipe?.start_to_be || pipe?.datas_etapas?.['7']?.data_inicio || pipe?.datas_etapas?.['7']?.data_fim || '';
+    const initialStartAsIs = sanitizeDateYear(pipe?.start_as_is || pipe?.datas_etapas?.['5']?.data_inicio || pipe?.datas_etapas?.['5']?.data_fim) || '';
+    const initialStartToBe = sanitizeDateYear(pipe?.start_to_be || pipe?.datas_etapas?.['7']?.data_inicio || pipe?.datas_etapas?.['7']?.data_fim) || '';
 
     const stepDates = pipe?.datas_etapas?.[stepKey];
-    let startDate = stepDates?.data_inicio || '';
-    let endDate = stepDates?.data_fim || '';
+    let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
+    let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
 
     if (detailModalGroup === 'fase_1') {
       if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
@@ -491,12 +506,12 @@ export default function FluxoTrabalho() {
     setDetailModalPrincipalId(principalId);
     setDetailModalBackupId(backupId);
 
-    const initialStartAsIs = detailModalPipe?.start_as_is || detailModalPipe?.datas_etapas?.['5']?.data_inicio || detailModalPipe?.datas_etapas?.['5']?.data_fim || detailModalStartAsIs || '';
-    const initialStartToBe = detailModalPipe?.start_to_be || detailModalPipe?.datas_etapas?.['7']?.data_inicio || detailModalPipe?.datas_etapas?.['7']?.data_fim || detailModalStartToBe || '';
+    const initialStartAsIs = sanitizeDateYear(detailModalPipe?.start_as_is || detailModalPipe?.datas_etapas?.['5']?.data_inicio || detailModalPipe?.datas_etapas?.['5']?.data_fim || detailModalStartAsIs) || '';
+    const initialStartToBe = sanitizeDateYear(detailModalPipe?.start_to_be || detailModalPipe?.datas_etapas?.['7']?.data_inicio || detailModalPipe?.datas_etapas?.['7']?.data_fim || detailModalStartToBe) || '';
 
     const stepDates = detailModalPipe?.datas_etapas?.[stepKey];
-    let startDate = stepDates?.data_inicio || '';
-    let endDate = stepDates?.data_fim || '';
+    let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
+    let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
 
     if (detailModalGroup === 'fase_1') {
       if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
@@ -530,29 +545,34 @@ export default function FluxoTrabalho() {
 
       let targetPipe = detailModalPipe;
 
+      const cleanStartDate = sanitizeDateYear(detailModalStartDate);
+      const cleanEndDate = sanitizeDateYear(detailModalEndDate);
+      const cleanStartAsIs = sanitizeDateYear(detailModalStartAsIs);
+      const cleanStartToBe = sanitizeDateYear(detailModalStartToBe);
+
       const currentDatas = targetPipe?.datas_etapas || {};
       const updatedDatas: Record<string, StepDates> = {
         ...currentDatas,
         [stepKey]: {
-          data_inicio: detailModalStartDate || null,
-          data_fim: detailModalEndDate || null
+          data_inicio: cleanStartDate,
+          data_fim: cleanEndDate
         }
       };
 
-      let finalStartAsIs = detailModalStartAsIs || null;
-      let finalStartToBe = detailModalStartToBe || null;
+      let finalStartAsIs = cleanStartAsIs;
+      let finalStartToBe = cleanStartToBe;
 
       if (detailModalGroup === 'fase_1') {
-        if (detailModalStepNum === 5 && detailModalStartDate) {
-          finalStartAsIs = detailModalStartDate;
+        if (detailModalStepNum === 5 && cleanStartDate) {
+          finalStartAsIs = cleanStartDate;
         } else if (!finalStartAsIs && updatedDatas['5']?.data_inicio) {
-          finalStartAsIs = updatedDatas['5'].data_inicio;
+          finalStartAsIs = sanitizeDateYear(updatedDatas['5'].data_inicio);
         }
 
-        if (detailModalStepNum === 7 && detailModalStartDate) {
-          finalStartToBe = detailModalStartDate;
+        if (detailModalStepNum === 7 && cleanStartDate) {
+          finalStartToBe = cleanStartDate;
         } else if (!finalStartToBe && updatedDatas['7']?.data_inicio) {
-          finalStartToBe = updatedDatas['7'].data_inicio;
+          finalStartToBe = sanitizeDateYear(updatedDatas['7'].data_inicio);
         }
 
         if (finalStartAsIs) {
@@ -761,10 +781,26 @@ export default function FluxoTrabalho() {
   // Atualizar Datas dos Marcos Apresentação AS-IS e TO-BE diretamente (Aba Cronograma)
   const handleUpdateMilestoneDate = async (client: Client, milestoneType: 'as_is' | 'to_be', dateVal: string) => {
     try {
+      // Sanitizar para garantir que respeita selectedYear do banner
+      const sanitizeWithSelectedYear = (d?: string | null): string | null => {
+        if (!d) return null;
+        const trimmed = d.trim();
+        if (!trimmed) return null;
+        const parts = trimmed.split('-');
+        if (parts.length === 3) {
+          const y = Number(parts[0]);
+          if (isNaN(y) || y < 1900 || y !== selectedYear) {
+            return `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          }
+        }
+        return trimmed;
+      };
+
       const existingPipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
 
-      const newStartAsIs = milestoneType === 'as_is' ? (dateVal || null) : (existingPipe?.start_as_is || null);
-      const newStartToBe = milestoneType === 'to_be' ? (dateVal || null) : (existingPipe?.start_to_be || null);
+      const sanitizedInputDate = sanitizeWithSelectedYear(dateVal);
+      const newStartAsIs = milestoneType === 'as_is' ? sanitizedInputDate : sanitizeWithSelectedYear(existingPipe?.start_as_is);
+      const newStartToBe = milestoneType === 'to_be' ? sanitizedInputDate : sanitizeWithSelectedYear(existingPipe?.start_to_be);
 
       const currentDatas = existingPipe?.datas_etapas || {};
       const updatedDatas: Record<string, StepDates> = { ...currentDatas };
@@ -774,12 +810,27 @@ export default function FluxoTrabalho() {
           data_inicio: newStartAsIs,
           data_fim: updatedDatas['5']?.data_fim || null
         };
+      } else if (milestoneType === 'as_is') {
+        if (updatedDatas['5']) {
+          updatedDatas['5'] = {
+            data_inicio: null,
+            data_fim: updatedDatas['5']?.data_fim || null
+          };
+        }
       }
+
       if (newStartToBe) {
         updatedDatas['7'] = {
           data_inicio: newStartToBe,
           data_fim: updatedDatas['7']?.data_fim || null
         };
+      } else if (milestoneType === 'to_be') {
+        if (updatedDatas['7']) {
+          updatedDatas['7'] = {
+            data_inicio: null,
+            data_fim: updatedDatas['7']?.data_fim || null
+          };
+        }
       }
 
       if (!existingPipe) {
@@ -1058,6 +1109,7 @@ export default function FluxoTrabalho() {
           startToBe={detailModalStartToBe}
           selectedMemberIds={detailModalSelectedMemberIds}
           stepStatus={detailModalStatus}
+          selectedYear={selectedYear}
           saving={savingDetail}
           onClose={() => setDetailModalOpen(false)}
           onSwitchStep={handleSwitchDetailStep}

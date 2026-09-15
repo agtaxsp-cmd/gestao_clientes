@@ -24,6 +24,7 @@ export interface WorkflowDetailModalProps {
   startToBe?: string;
   selectedMemberIds?: string[];
   stepStatus?: EtapaColorStatus;
+  selectedYear?: number;
   saving: boolean;
   onClose: () => void;
   onSwitchStep: (stepNum: number) => void;
@@ -59,6 +60,7 @@ export default function WorkflowDetailModal({
   startToBe = '',
   selectedMemberIds = [],
   stepStatus = 'pendente',
+  selectedYear,
   saving,
   onClose,
   onSwitchStep,
@@ -275,9 +277,13 @@ export default function WorkflowDetailModal({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Data Início</label>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                  Data Início {selectedYear ? `(${selectedYear})` : ''}
+                </label>
                 <input
                   type="date"
+                  min={selectedYear ? `${selectedYear}-01-01` : undefined}
+                  max={selectedYear ? `${selectedYear}-12-31` : undefined}
                   value={startDate}
                   onChange={(e) => onStartDateChange && onStartDateChange(e.target.value)}
                   className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"
@@ -285,9 +291,13 @@ export default function WorkflowDetailModal({
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Data Término</label>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                  Data Término {selectedYear ? `(${selectedYear})` : ''}
+                </label>
                 <input
                   type="date"
+                  min={selectedYear ? `${selectedYear}-01-01` : undefined}
+                  max={selectedYear ? `${selectedYear}-12-31` : undefined}
                   value={endDate}
                   onChange={(e) => onEndDateChange && onEndDateChange(e.target.value)}
                   className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer"

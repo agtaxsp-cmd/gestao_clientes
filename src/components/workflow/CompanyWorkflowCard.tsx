@@ -383,6 +383,7 @@ export default function CompanyWorkflowCard({
         {activeTab === 'cronograma' && (
           <CompanyScheduleTab
             client={client}
+            selectedYear={selectedYear}
             pipeFase1={pipeFase1}
             fasesDiagnostico={fasesDiagnostico}
             onOpenDetail={(stepNum) => onOpenDetail(client, 'fase_1', stepNum, null)}
