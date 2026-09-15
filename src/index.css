@@ -51,3 +51,14 @@
 .scrollbar-thin:hover::-webkit-scrollbar-thumb {
   background-color: #94a3b8;
 }
+
+/* Scrollbar totalmente oculta visualmente, permitindo rolagem por scroll do mouse */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE e Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome, Safari e Opera */
+  width: 0px;
+  height: 0px;
+}

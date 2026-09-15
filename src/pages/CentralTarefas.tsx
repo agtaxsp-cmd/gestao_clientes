@@ -337,57 +337,59 @@ export default function CentralTarefas() {
           <span>Erro ao carregar tarefas: {error}</span>
         </div>
       ) : viewMode === 'kanban' ? (
-        /* Visão Quadro Kanban (5 colunas) */
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 items-start">
-          <KanbanColumn
-            status="backlog"
-            title="Backlog"
-            tarefas={filteredTarefas.filter(t => t.status === 'backlog')}
-            onMoveStatus={updateStatus}
-            onEdit={handleOpenEditModal}
-            onDelete={deleteTarefa}
-            onAddNew={() => handleOpenCreateModal('backlog')}
-          />
+        /* Visão Quadro Kanban (5 colunas responsivas com rolagem fluida) */
+        <div className="w-full overflow-x-auto scrollbar-none pb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 items-start min-w-[1280px] xl:min-w-0">
+            <KanbanColumn
+              status="backlog"
+              title="Backlog"
+              tarefas={filteredTarefas.filter(t => t.status === 'backlog')}
+              onMoveStatus={updateStatus}
+              onEdit={handleOpenEditModal}
+              onDelete={deleteTarefa}
+              onAddNew={() => handleOpenCreateModal('backlog')}
+            />
 
-          <KanbanColumn
-            status="todo"
-            title="A Fazer"
-            tarefas={filteredTarefas.filter(t => t.status === 'todo')}
-            onMoveStatus={updateStatus}
-            onEdit={handleOpenEditModal}
-            onDelete={deleteTarefa}
-            onAddNew={() => handleOpenCreateModal('todo')}
-          />
+            <KanbanColumn
+              status="todo"
+              title="A Fazer"
+              tarefas={filteredTarefas.filter(t => t.status === 'todo')}
+              onMoveStatus={updateStatus}
+              onEdit={handleOpenEditModal}
+              onDelete={deleteTarefa}
+              onAddNew={() => handleOpenCreateModal('todo')}
+            />
 
-          <KanbanColumn
-            status="in_progress"
-            title="Em Andamento"
-            tarefas={filteredTarefas.filter(t => t.status === 'in_progress')}
-            onMoveStatus={updateStatus}
-            onEdit={handleOpenEditModal}
-            onDelete={deleteTarefa}
-            onAddNew={() => handleOpenCreateModal('in_progress')}
-          />
+            <KanbanColumn
+              status="in_progress"
+              title="Em Andamento"
+              tarefas={filteredTarefas.filter(t => t.status === 'in_progress')}
+              onMoveStatus={updateStatus}
+              onEdit={handleOpenEditModal}
+              onDelete={deleteTarefa}
+              onAddNew={() => handleOpenCreateModal('in_progress')}
+            />
 
-          <KanbanColumn
-            status="in_review"
-            title="Revisão"
-            tarefas={filteredTarefas.filter(t => t.status === 'in_review')}
-            onMoveStatus={updateStatus}
-            onEdit={handleOpenEditModal}
-            onDelete={deleteTarefa}
-            onAddNew={() => handleOpenCreateModal('in_review')}
-          />
+            <KanbanColumn
+              status="in_review"
+              title="Revisão"
+              tarefas={filteredTarefas.filter(t => t.status === 'in_review')}
+              onMoveStatus={updateStatus}
+              onEdit={handleOpenEditModal}
+              onDelete={deleteTarefa}
+              onAddNew={() => handleOpenCreateModal('in_review')}
+            />
 
-          <KanbanColumn
-            status="done"
-            title="Concluído"
-            tarefas={filteredTarefas.filter(t => t.status === 'done')}
-            onMoveStatus={updateStatus}
-            onEdit={handleOpenEditModal}
-            onDelete={deleteTarefa}
-            onAddNew={() => handleOpenCreateModal('done')}
-          />
+            <KanbanColumn
+              status="done"
+              title="Concluído"
+              tarefas={filteredTarefas.filter(t => t.status === 'done')}
+              onMoveStatus={updateStatus}
+              onEdit={handleOpenEditModal}
+              onDelete={deleteTarefa}
+              onAddNew={() => handleOpenCreateModal('done')}
+            />
+          </div>
         </div>
       ) : (
         /* Visão Tabela / Ranking GUT */

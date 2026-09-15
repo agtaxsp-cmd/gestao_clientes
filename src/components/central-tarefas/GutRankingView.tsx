@@ -45,13 +45,12 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scrollbar-none">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-slate-100/60 text-[11px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
               <th className="px-4 py-3 text-center w-12">#</th>
               <th className="px-4 py-3 text-center">Score GUT</th>
-              <th className="px-4 py-3 text-center">G · U · T</th>
               <th className="px-4 py-3">Tarefa</th>
               <th className="px-4 py-3">Empresa Cliente</th>
               <th className="px-4 py-3">Responsável</th>
@@ -80,21 +79,19 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
 
                   {/* Score GUT */}
                   <td className="px-4 py-3.5 text-center">
-                    <span className={cn(
-                      "px-2.5 py-1 rounded-lg text-xs font-black inline-flex items-center gap-1.5 border",
-                      gut.badgeBg,
-                      gut.badgeText,
-                      gut.badgeBorder
-                    )}>
+                    <span
+                      title={`Gravidade: ${tarefa.gravidade} × Urgência: ${tarefa.urgencia} × Tendência: ${tarefa.tendencia}`}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-xs font-black inline-flex items-center gap-1.5 border cursor-help",
+                        gut.badgeBg,
+                        gut.badgeText,
+                        gut.badgeBorder
+                      )}
+                    >
                       <span className={cn("w-2 h-2 rounded-full shrink-0", gut.dotColor)} />
                       <span>{tarefa.gut_score}</span>
                       <span className="text-[10px] opacity-70 font-semibold">({gut.label})</span>
                     </span>
-                  </td>
-
-                  {/* Detalhe G U T */}
-                  <td className="px-4 py-3.5 text-center font-mono text-[11px] text-slate-600 font-bold">
-                    {tarefa.gravidade} × {tarefa.urgencia} × {tarefa.tendencia}
                   </td>
 
                   {/* Título & Descrição */}

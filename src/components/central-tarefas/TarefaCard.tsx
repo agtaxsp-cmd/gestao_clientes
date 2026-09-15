@@ -70,17 +70,6 @@ export default function TarefaCard({ tarefa, onEdit, onDelete, onMoveStatus }: T
         isCritica ? "border-rose-300 hover:border-rose-400" : "border-slate-200 hover:border-slate-300"
       )}
     >
-      {/* Alerta de criticidade superior (se >= 80) integrado no card para nunca cortar */}
-      {isCritica && tarefa.status !== 'done' && (
-        <div className="mb-2.5 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-            <span>Criticidade Máxima</span>
-          </div>
-          <span className="text-[9px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded">GUT {tarefa.gut_score}</span>
-        </div>
-      )}
-
       {/* Header do Card: Badges */}
       <div className="flex items-center justify-between gap-2 mb-2.5">
         {/* Badge GUT */}

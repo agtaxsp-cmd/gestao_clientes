@@ -105,19 +105,19 @@ export default function KanbanColumn({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        "flex flex-col bg-slate-100/70 rounded-2xl border p-3 min-w-[280px] w-full transition-colors duration-200",
+        "flex flex-col bg-slate-100/70 rounded-2xl border p-3 min-w-[240px] w-full transition-colors duration-200 shadow-2xs",
         isOver ? "bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-400/40" : cfg.borderColor
       )}
     >
       {/* Header da Coluna */}
       <div className={cn(
-        "px-3 py-2.5 rounded-xl flex items-center justify-between mb-3 border",
+        "px-3 py-2 rounded-xl flex items-center justify-between mb-3 border gap-1.5",
         cfg.headerBg,
         cfg.borderColor
       )}>
         <div className="flex items-center gap-1.5 min-w-0">
           <Icon className={cn("w-4 h-4 shrink-0", cfg.color)} />
-          <h3 className={cn("text-xs font-black uppercase tracking-wider whitespace-nowrap truncate", cfg.color)}>
+          <h3 className={cn("text-xs font-black uppercase tracking-wider truncate", cfg.color)} title={title}>
             {title}
           </h3>
           <span className={cn(
@@ -129,13 +129,14 @@ export default function KanbanColumn({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           {criticasCount > 0 && status !== 'done' && (
             <span
-              title={`${criticasCount} tarefa(s) com GUT >= 80`}
-              className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider"
+              title={`${criticasCount} tarefa(s) crítica(s) com GUT >= 80`}
+              className="px-1.5 py-0.5 rounded-md bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 shadow-2xs"
             >
-              {criticasCount} crítica{criticasCount > 1 ? 's' : ''}
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span>{criticasCount}</span>
             </span>
           )}
 
@@ -151,7 +152,7 @@ export default function KanbanColumn({
       </div>
 
       {/* Lista de Cards da Coluna */}
-      <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-[calc(100vh-280px)] pr-0.5">
+      <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto scrollbar-none max-h-[calc(100vh-260px)] pr-0.5">
         {tarefas.length === 0 ? (
           <div className={cn(
             "p-6 rounded-xl border border-dashed text-center text-xs flex flex-col items-center justify-center gap-2",
