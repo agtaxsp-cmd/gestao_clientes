@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { CentralTarefa, CentralTarefaStatus } from '../../types';
 import { getGutCriticity } from '../../lib/gut';
-import { Building2, User, Calendar, Edit2, Trash2, CheckCircle2, Clock } from 'lucide-react';
+import { Building2, User, Calendar, Edit2, Trash2, CheckCircle2, Clock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface GutRankingViewProps {
@@ -19,9 +19,79 @@ const STATUS_LABELS: Record<CentralTarefaStatus, { label: string; badge: string 
   done: { label: 'Concluído', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
 };
 
+type SortField = 'gut_score' | 'titulo' | 'client' | 'responsavel' | 'status' | 'data_vencimento';
+type SortOrder = 'asc' | 'desc';
+
 export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus }: GutRankingViewProps) {
-  // Ordena rigorosamente pelo Score GUT decrescente
-  const sorted = [...tarefas].sort((a, b) => (b.gut_score || 0) - (a.gut_score || 0));
+  const [sortField, setSortField] = useState<SortField>('gut_score');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      // Padrão desc para GUT e Prazo; asc para textos
+      setSortOrder(field === 'gut_score' || field === 'data_vencimento' ? 'desc' : 'asc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    return [...tarefas].sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      switch (sortField) {
+        case 'gut_score':
+          valA = a.gut_score || 0;
+          valB = b.gut_score || 0;
+          break;
+        case 'titulo':
+          valA = a.titulo || '';
+          valB = b.titulo || '';
+          break;
+        case 'client':
+          valA = a.client?.razao_social || 'ZZZ';
+          valB = b.client?.razao_social || 'ZZZ';
+          break;
+        case 'responsavel':
+          valA = a.responsavel?.nome || a.responsavel_revisao?.nome || 'ZZZ';
+          valB = b.responsavel?.nome || b.responsavel_revisao?.nome || 'ZZZ';
+          break;
+        case 'status': {
+          const statusPriority: Record<CentralTarefaStatus, number> = {
+            backlog: 1,
+            todo: 2,
+            in_progress: 3,
+            in_review: 4,
+            done: 5
+          };
+          valA = statusPriority[a.status] || 0;
+          valB = statusPriority[b.status] || 0;
+          break;
+        }
+        case 'data_vencimento':
+          valA = a.data_vencimento || '';
+          valB = b.data_vencimento || '';
+          if (!valA && !valB) return 0;
+          if (!valA) return 1;
+          if (!valB) return -1;
+          break;
+        default:
+          valA = a.gut_score || 0;
+          valB = b.gut_score || 0;
+      }
+
+      if (typeof valA === 'string') {
+        const res = valA.localeCompare(valB, 'pt-BR', { sensitivity: 'base' });
+        return sortOrder === 'asc' ? res : -res;
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [tarefas, sortField, sortOrder]);
 
   if (sorted.length === 0) {
     return (
@@ -30,6 +100,38 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
       </div>
     );
   }
+
+  const renderSortableHeader = (field: SortField, label: string, align: 'left' | 'center' | 'right' = 'left') => {
+    const isActive = sortField === field;
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={cn(
+          "px-4 py-3 select-none cursor-pointer hover:bg-slate-200/70 transition-colors group/th",
+          align === 'center' && "text-center",
+          align === 'right' && "text-right",
+          isActive && "bg-indigo-50/80 text-indigo-900 font-extrabold"
+        )}
+      >
+        <div className={cn(
+          "inline-flex items-center gap-1.5",
+          align === 'center' && "justify-center",
+          align === 'right' && "justify-end"
+        )}>
+          <span>{label}</span>
+          {isActive ? (
+            sortOrder === 'asc' ? (
+              <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            ) : (
+              <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            )
+          ) : (
+            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-0 group-hover/th:opacity-100 transition-opacity shrink-0" />
+          )}
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
@@ -41,7 +143,7 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
           </h4>
         </div>
         <span className="text-[11px] text-slate-500 font-mono">
-          {sorted.length} tarefas ordenadas por criticidade
+          {sorted.length} tarefas {sortField ? `ordenadas por ${sortField}` : 'ordenadas por criticidade'}
         </span>
       </div>
 
@@ -50,12 +152,12 @@ export default function GutRankingView({ tarefas, onEdit, onDelete, onMoveStatus
           <thead>
             <tr className="bg-slate-100/60 text-[11px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
               <th className="px-4 py-3 text-center w-12">#</th>
-              <th className="px-4 py-3 text-center">Score GUT</th>
-              <th className="px-4 py-3">Tarefa</th>
-              <th className="px-4 py-3">Empresa Cliente</th>
-              <th className="px-4 py-3">Responsável</th>
-              <th className="px-4 py-3 text-center">Status</th>
-              <th className="px-4 py-3 text-center">Prazo</th>
+              {renderSortableHeader('gut_score', 'Score GUT', 'center')}
+              {renderSortableHeader('titulo', 'Tarefa', 'left')}
+              {renderSortableHeader('client', 'Empresa Cliente', 'left')}
+              {renderSortableHeader('responsavel', 'Responsável', 'left')}
+              {renderSortableHeader('status', 'Status', 'center')}
+              {renderSortableHeader('data_vencimento', 'Prazo', 'center')}
               <th className="px-4 py-3 text-right">Ações</th>
             </tr>
           </thead>
