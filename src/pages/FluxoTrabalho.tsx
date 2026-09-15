@@ -781,15 +781,15 @@ export default function FluxoTrabalho() {
   // Atualizar Datas dos Marcos Apresentação AS-IS e TO-BE diretamente (Aba Cronograma)
   const handleUpdateMilestoneDate = async (client: Client, milestoneType: 'as_is' | 'to_be', dateVal: string) => {
     try {
-      // Sanitizar para garantir que respeita selectedYear do banner
-      const sanitizeWithSelectedYear = (d?: string | null): string | null => {
+      // Manter a data informada se tiver um ano válido (>= 1900), corrigindo apenas se for ano inválido
+      const sanitizeDate = (d?: string | null): string | null => {
         if (!d) return null;
         const trimmed = d.trim();
         if (!trimmed) return null;
         const parts = trimmed.split('-');
         if (parts.length === 3) {
           const y = Number(parts[0]);
-          if (isNaN(y) || y < 1900 || y !== selectedYear) {
+          if (isNaN(y) || y < 1900) {
             return `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
           }
         }
@@ -798,9 +798,9 @@ export default function FluxoTrabalho() {
 
       const existingPipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
 
-      const sanitizedInputDate = sanitizeWithSelectedYear(dateVal);
-      const newStartAsIs = milestoneType === 'as_is' ? sanitizedInputDate : sanitizeWithSelectedYear(existingPipe?.start_as_is);
-      const newStartToBe = milestoneType === 'to_be' ? sanitizedInputDate : sanitizeWithSelectedYear(existingPipe?.start_to_be);
+      const sanitizedInputDate = sanitizeDate(dateVal);
+      const newStartAsIs = milestoneType === 'as_is' ? sanitizedInputDate : sanitizeDate(existingPipe?.start_as_is);
+      const newStartToBe = milestoneType === 'to_be' ? sanitizedInputDate : sanitizeDate(existingPipe?.start_to_be);
 
       const currentDatas = existingPipe?.datas_etapas || {};
       const updatedDatas: Record<string, StepDates> = { ...currentDatas };

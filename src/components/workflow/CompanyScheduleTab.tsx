@@ -26,9 +26,12 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
     const parts = val.split('-');
     if (parts.length === 3) {
       const y = Number(parts[0]);
-      if (isNaN(y) || y < 1900 || y !== selectedYear) {
+      // Se o ano for inválido (< 1900), ajusta para o selectedYear
+      if (isNaN(y) || y < 1900) {
         return `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
       }
+      // Se já possui um ano válido (ex: 2026), MANTÉM intacto!
+      return val;
     }
     return val;
   };
@@ -37,7 +40,7 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
 
   useEffect(() => {
     setLocalVal(normalizeDate(value));
-  }, [value, selectedYear]);
+  }, [value]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = e.target.value;
@@ -51,8 +54,8 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
     const parts = newVal.split('-');
     if (parts.length === 3) {
       const y = Number(parts[0]);
-      // Se o ano for completo (4 dígitos) e respeitar o selectedYear, salva de imediato
-      if (parts[0].length === 4 && y === selectedYear) {
+      // Aceita qualquer ano de 4 dígitos válido (>= 1900)
+      if (parts[0].length === 4 && y >= 1900) {
         onChange(newVal);
       }
     }
@@ -65,16 +68,21 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
     }
     const parts = localVal.split('-');
     if (parts.length === 3) {
-      const clean = `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      setLocalVal(clean);
-      if (clean !== value) {
-        onChange(clean);
+      const y = Number(parts[0]);
+      if (parts[0].length === 4 && y >= 1900) {
+        if (localVal !== value) {
+          onChange(localVal);
+        }
+      } else if (y < 1900) {
+        const clean = `${selectedYear}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        setLocalVal(clean);
+        if (clean !== value) {
+          onChange(clean);
+        }
       }
     }
   };
 
-  const minDate = `${selectedYear}-01-01`;
-  const maxDate = `${selectedYear}-12-31`;
   const isIndigo = theme === 'indigo';
 
   return (
@@ -93,8 +101,8 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              {label} ({selectedYear})
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block truncate">
+              {label}
             </label>
             {localVal && (
               <button
@@ -112,8 +120,6 @@ function MilestoneDateInput({ label, value, selectedYear, theme, onChange }: Mil
           </div>
           <input
             type="date"
-            min={minDate}
-            max={maxDate}
             value={localVal}
             onChange={handleInputChange}
             onBlur={handleBlur}
