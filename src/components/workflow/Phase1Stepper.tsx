@@ -25,6 +25,7 @@ export default function Phase1Stepper({
   onAdvance,
   onRegress,
   onOpenDetail,
+  onUpdateStepStatus,
   onSavePeriodoEscopo
 }: Phase1StepperProps) {
   const isFase1Concluido = pipeFase1?.status === 'concluido';
@@ -34,6 +35,7 @@ export default function Phase1Stepper({
 
   const [editingEscopo, setEditingEscopo] = useState(false);
   const [tempEscopo, setTempEscopo] = useState(periodoEscopo);
+  const [statusMenuStep, setStatusMenuStep] = useState<number | null>(null);
 
   const handleSaveEscopo = () => {
     if (onSavePeriodoEscopo) {
@@ -66,6 +68,12 @@ export default function Phase1Stepper({
     const principal = principalId ? members.find(m => m.id === principalId) : undefined;
     return { assignedMembers: principal ? [principal] : [] };
   };
+
+  // Contagem de etapas concluídas reais
+  const totalSteps = fasesDiagnostico.length || 7;
+  const completedStepsCount = Object.keys(statusEtapas).filter(
+    k => normalizeStepStatus(statusEtapas[k]) === 'concluido'
+  ).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -116,11 +124,14 @@ export default function Phase1Stepper({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-slate-500">Status Geral:</span>
-          <strong className={cn("font-bold uppercase", isFase1Concluido ? "text-emerald-600" : "text-indigo-600")}>
-            {pipeFase1?.status || 'Iniciado'}
-          </strong>
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500 font-medium">Progresso: <strong>{completedStepsCount}/{totalSteps}</strong></span>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">Status Geral:</span>
+            <strong className={cn("font-bold uppercase", isFase1Concluido ? "text-emerald-600" : "text-indigo-600")}>
+              {pipeFase1?.status || 'Iniciado'}
+            </strong>
+          </div>
         </div>
       </div>
 
@@ -132,12 +143,10 @@ export default function Phase1Stepper({
         <div 
           className={cn(
             "absolute top-[20px] left-6 h-1 -translate-y-1/2 z-0 rounded-full transition-all duration-500",
-            isFase1Concluido ? "bg-emerald-500" : "bg-indigo-600"
+            completedStepsCount === totalSteps ? "bg-emerald-500" : "bg-indigo-600"
           )}
           style={{
-            width: isFase1Concluido 
-              ? 'calc(100% - 3rem)' 
-              : `calc(${Math.round(((f1StepNum - 1) / Math.max(1, (fasesDiagnostico.length || 7) - 1)) * 100)}% * 0.9 + 5%)`
+            width: `calc(${Math.min(100, Math.round((completedStepsCount / Math.max(1, totalSteps)) * 100))}% * 0.9 + 5%)`
           }}
         ></div>
 
@@ -149,37 +158,36 @@ export default function Phase1Stepper({
           {fasesDiagnostico.map((phaseObj, index) => {
             const stepNum = index + 1;
             const stepKey = String(stepNum);
-            const isOutorga = Boolean(phaseObj.key?.startsWith('outorga') || phaseObj.nome?.toLowerCase().includes('outorga') || phaseObj.key?.toLowerCase().includes('outorga'));
-            const stepDates = pipeFase1?.datas_etapas?.[stepKey];
-            const hasDates = Boolean(stepDates?.data_inicio || stepDates?.data_fim);
             const rawStatus = statusEtapas[stepKey];
             const normSt = rawStatus ? normalizeStepStatus(rawStatus) : null;
 
+            // Desacoplado: O status da etapa NÃO é concluído automaticamente ao avançar
             const stepStatus = normSt === 'na'
               ? 'na'
-              : (normSt === 'concluido' || stepNum < f1StepNum || isFase1Concluido || (isOutorga && hasDates)
-                  ? 'concluido'
-                  : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'))
-                );
+              : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'));
 
             const assign = getStepResponsibles(stepNum, phaseObj.key);
             const statusMeta = STEP_STATUS_MAP[stepStatus];
 
             return (
-              <div
+              <button
+                type="button"
                 key={phaseObj.id || phaseObj.key}
-                onClick={() => onOpenDetail(client, 'fase_1', stepNum)}
-                className="flex flex-col items-center gap-1.5 cursor-pointer p-2 rounded-xl hover:bg-slate-50 transition-all group/step"
-                title={`Etapa ${stepNum}: ${phaseObj.nome} (${statusMeta?.label || stepStatus})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetail(client, 'fase_1', stepNum);
+                }}
+                className="w-full flex flex-col items-center gap-1.5 cursor-pointer p-2 rounded-xl hover:bg-slate-50 transition-all group/step relative text-center appearance-none border-0 bg-transparent focus:outline-none"
+                title={`Etapa ${stepNum}: ${phaseObj.nome} (${statusMeta?.label || stepStatus}) - Clique para abrir detalhes e status`}
               >
                 {/* Círculo da Etapa */}
                 <div
                   className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-105",
+                    "w-9 h-9 rounded-full flex items-center justify-center shadow-xs transition-all shrink-0 group-hover/step:scale-105 active:scale-95",
                     stepStatus === 'concluido' && "bg-emerald-500 text-white ring-2 ring-emerald-200",
                     stepStatus === 'em_andamento' && "bg-amber-500 text-white ring-2 ring-amber-200 font-bold",
                     stepStatus === 'na' && "bg-slate-200 border-2 border-slate-300 text-slate-500 font-extrabold text-[10px]",
-                    stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-500 font-semibold text-xs"
+                    stepStatus === 'pendente' && "bg-white border-2 border-slate-300 text-slate-500 font-semibold text-xs group-hover/step:border-indigo-400"
                   )}
                 >
                   {stepStatus === 'concluido' ? (
@@ -193,7 +201,7 @@ export default function Phase1Stepper({
 
                 {/* Nome da Etapa */}
                 <span className={cn(
-                  "text-[11px] font-bold text-center leading-tight mt-0.5",
+                  "text-[11px] font-bold text-center leading-tight mt-0.5 group-hover/step:text-indigo-600 transition-colors",
                   stepStatus === 'concluido' && "text-emerald-700",
                   stepStatus === 'em_andamento' && "text-amber-700",
                   stepStatus === 'na' && "text-slate-500 line-through",
@@ -202,7 +210,7 @@ export default function Phase1Stepper({
                   {phaseObj.nome}
                 </span>
 
-                {/* Responsáveis (Suporte a múltiplos responsáveis - Item 4) */}
+                {/* Responsáveis */}
                 <div className="w-full flex flex-col items-center text-[10px] text-slate-500 bg-slate-50/80 px-1.5 py-0.5 rounded-md border border-slate-100 group-hover/step:border-indigo-200 transition-colors">
                   {assign.assignedMembers.length > 0 ? (
                     <div className="flex flex-col items-center gap-0.5">
@@ -217,7 +225,7 @@ export default function Phase1Stepper({
                     <span className="text-slate-400 italic text-[9px]">Sem resp.</span>
                   )}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

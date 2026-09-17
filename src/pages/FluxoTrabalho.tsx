@@ -28,7 +28,8 @@ import {
   RegimeEnum,
   EtapaColorStatus,
   normalizeStepStatus,
-  StepDates
+  StepDates,
+  STEP_STATUS_MAP
 } from '../types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CompanyWorkflowCard from '../components/workflow/CompanyWorkflowCard';
@@ -80,8 +81,8 @@ export default function FluxoTrabalho() {
   const [analyticClient, setAnalyticClient] = useState<Client | null>(null);
 
   // Sanitizar data para o ano do banner
-  const sanitizeDateYear = (d?: string | null, targetYear = selectedYear): string | null => {
-    if (!d) return null;
+  const sanitizeDateYear = (d?: unknown, targetYear = selectedYear): string | null => {
+    if (!d || typeof d !== 'string') return null;
     const trimmed = d.trim();
     if (!trimmed) return null;
     const parts = trimmed.split('-');
@@ -240,18 +241,17 @@ export default function FluxoTrabalho() {
         if (insErr) throw insErr;
         pipe = newPipe;
       } else {
-        const nextStep = pipe.etapa_atual + 1;
-        const isFinished = nextStep > totalSteps;
-        const nextStatus: PipelineStatusEnum = isFinished ? 'concluido' : 'em_andamento';
-        const nextMsg = isFinished 
-          ? 'Diagnóstico finalizado com sucesso!' 
-          : `Em andamento na etapa ${nextStep}: ${clientPhases[nextStep - 1]?.nome || ''}`;
+        if (pipe.etapa_atual >= totalSteps) {
+          // Já está na última etapa; o status agora é controlado individualmente por clique na etapa
+          return;
+        }
+        const nextStep = Math.min(pipe.etapa_atual + 1, totalSteps);
+        const nextMsg = `Em andamento na etapa ${nextStep}: ${clientPhases[nextStep - 1]?.nome || ''}`;
 
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update({
-            etapa_atual: isFinished ? totalSteps : nextStep,
-            status: nextStatus,
+            etapa_atual: nextStep,
             mensagem_info: nextMsg,
             updated_at: new Date().toISOString()
           })
@@ -262,7 +262,7 @@ export default function FluxoTrabalho() {
 
       await logActivity({
         titulo: 'Avanço no Diagnóstico',
-        descricao: `Etapa avançada no fluxo de Diagnóstico de ${client.razao_social}`,
+        descricao: `Etapa avançada para ${currentPipe ? Math.min(currentPipe.etapa_atual + 1, totalSteps) : 2} no fluxo de Diagnóstico de ${client.razao_social}`,
         tipo_log: 'info',
         client_id: client.id,
         usuario_nome: getUserName()
@@ -403,138 +403,138 @@ export default function FluxoTrabalho() {
     stepNum: number, 
     month?: number | null
   ) => {
-    let pipe: WorkflowPipeline | undefined;
-    if (grupo === 'fase_1') {
-      pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
-    } else {
-      pipe = pipelines.find(
-        p => p.client_id === client.id &&
-             p.fase_grupo === grupo &&
-             p.ano_referencia === selectedYear &&
-             p.mes_referencia === (month || 1)
-      );
-    }
-
-    setDetailModalClient(client);
-    setDetailModalGroup(grupo);
-    setDetailModalStepNum(stepNum);
-    setDetailModalMonth(month ?? null);
-    setDetailModalPipe(pipe || null);
-
-    const stepKey = String(stepNum);
-    const path = pipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (pipe?.caminho_rede || '') : '');
-    const notes = pipe?.observacoes_etapas?.[stepKey] || '';
-
-    const clientPhases = getClientPhasesForGroup(client, grupo);
-    const phaseKey = clientPhases[stepNum - 1]?.key || '';
-
-    const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
-    const custom = pipe?.responsaveis_etapas?.[stepKey];
-
-    const principalId = (custom && custom.principal_id !== undefined)
-      ? (custom.principal_id || '')
-      : (defaultAssign?.responsavel_principal_id || '');
-
-    const backupId = (custom && custom.backup_id !== undefined)
-      ? (custom.backup_id || '')
-      : (defaultAssign?.responsavel_backup_id || '');
-
-    setDetailModalPath(path);
-    setDetailModalNotes(notes);
-    setDetailModalPrincipalId(principalId);
-    setDetailModalBackupId(backupId);
-
-    // Carregar datas e múltiplos responsáveis
-    const initialStartAsIs = sanitizeDateYear(pipe?.start_as_is || pipe?.datas_etapas?.['5']?.data_inicio || pipe?.datas_etapas?.['5']?.data_fim) || '';
-    const initialStartToBe = sanitizeDateYear(pipe?.start_to_be || pipe?.datas_etapas?.['7']?.data_inicio || pipe?.datas_etapas?.['7']?.data_fim) || '';
-
-    const stepDates = pipe?.datas_etapas?.[stepKey];
-    let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
-    let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
-
-    if (detailModalGroup === 'fase_1') {
-      if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
-      if (stepNum === 7 && !startDate) startDate = initialStartToBe;
-    }
-
-    setDetailModalStartDate(startDate);
-    setDetailModalEndDate(endDate);
-    setDetailModalStartAsIs(initialStartAsIs);
-    setDetailModalStartToBe(initialStartToBe);
-    setDetailModalSelectedMemberIds(pipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
-
-    const savedStatus = pipe?.status_etapas?.[stepKey];
-    const normSaved = savedStatus ? normalizeStepStatus(savedStatus) : null;
-    const phaseObj = clientPhases[stepNum - 1];
-    const isOutorga = Boolean(phaseObj?.key?.startsWith('outorga') || phaseObj?.nome?.toLowerCase().includes('outorga') || phaseObj?.key?.toLowerCase().includes('outorga'));
-    const hasDates = Boolean(startDate || endDate);
-    const initialStatus = normSaved === 'na'
-      ? 'na'
-      : (normSaved === 'concluido' || stepNum < (pipe?.etapa_atual || 1) || pipe?.status === 'concluido' || (isOutorga && hasDates)
-          ? 'concluido'
-          : (normSaved || (pipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'))
+    try {
+      let pipe: WorkflowPipeline | undefined;
+      if (grupo === 'fase_1') {
+        pipe = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
+      } else {
+        pipe = pipelines.find(
+          p => p.client_id === client.id &&
+               p.fase_grupo === grupo &&
+               p.ano_referencia === selectedYear &&
+               p.mes_referencia === (month || 1)
         );
-    setDetailModalStatus(initialStatus);
+      }
 
-    setDetailModalOpen(true);
+      setDetailModalClient(client);
+      setDetailModalGroup(grupo);
+      setDetailModalStepNum(stepNum);
+      setDetailModalMonth(month ?? null);
+      setDetailModalPipe(pipe || null);
+
+      const stepKey = String(stepNum);
+      const path = pipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (pipe?.caminho_rede || '') : '');
+      const notes = pipe?.observacoes_etapas?.[stepKey] || '';
+
+      const clientPhases = getClientPhasesForGroup(client, grupo);
+      const phaseKey = clientPhases[stepNum - 1]?.key || '';
+
+      const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
+      const custom = pipe?.responsaveis_etapas?.[stepKey];
+
+      const principalId = (custom && custom.principal_id !== undefined)
+        ? (custom.principal_id || '')
+        : (defaultAssign?.responsavel_principal_id || '');
+
+      const backupId = (custom && custom.backup_id !== undefined)
+        ? (custom.backup_id || '')
+        : (defaultAssign?.responsavel_backup_id || '');
+
+      setDetailModalPath(path);
+      setDetailModalNotes(notes);
+      setDetailModalPrincipalId(principalId);
+      setDetailModalBackupId(backupId);
+
+      // Carregar datas e múltiplos responsáveis
+      const initialStartAsIs = sanitizeDateYear(pipe?.start_as_is || pipe?.datas_etapas?.['5']?.data_inicio || pipe?.datas_etapas?.['5']?.data_fim) || '';
+      const initialStartToBe = sanitizeDateYear(pipe?.start_to_be || pipe?.datas_etapas?.['7']?.data_inicio || pipe?.datas_etapas?.['7']?.data_fim) || '';
+
+      const stepDates = pipe?.datas_etapas?.[stepKey];
+      let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
+      let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
+
+      if (grupo === 'fase_1') {
+        if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
+        if (stepNum === 7 && !startDate) startDate = initialStartToBe;
+      }
+
+      setDetailModalStartDate(startDate);
+      setDetailModalEndDate(endDate);
+      setDetailModalStartAsIs(initialStartAsIs);
+      setDetailModalStartToBe(initialStartToBe);
+      
+      const rawMultiples = pipe?.responsaveis_multiplos_etapas?.[stepKey];
+      setDetailModalSelectedMemberIds(Array.isArray(rawMultiples) ? rawMultiples : []);
+
+      const savedStatus = pipe?.status_etapas?.[stepKey];
+      const normSaved = savedStatus ? normalizeStepStatus(savedStatus) : null;
+      const initialStatus = normSaved === 'na'
+        ? 'na'
+        : (normSaved || (pipe?.etapa_atual === stepNum ? 'em_andamento' : 'pendente'));
+      setDetailModalStatus(initialStatus);
+
+      setDetailModalOpen(true);
+    } catch (err) {
+      console.error('Erro ao abrir modal de detalhes da etapa:', err);
+    }
   };
 
   const handleSwitchDetailStep = (stepNum: number) => {
-    if (!detailModalClient) return;
-    setDetailModalStepNum(stepNum);
+    try {
+      if (!detailModalClient) return;
+      setDetailModalStepNum(stepNum);
 
-    const stepKey = String(stepNum);
-    const path = detailModalPipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (detailModalPipe?.caminho_rede || '') : '');
-    const notes = detailModalPipe?.observacoes_etapas?.[stepKey] || '';
+      const stepKey = String(stepNum);
+      const path = detailModalPipe?.caminhos_rede_etapas?.[stepKey] || (stepNum === 1 ? (detailModalPipe?.caminho_rede || '') : '');
+      const notes = detailModalPipe?.observacoes_etapas?.[stepKey] || '';
 
-    const clientPhases = getClientPhasesForGroup(detailModalClient, detailModalGroup);
-    const phaseKey = clientPhases[stepNum - 1]?.key || '';
+      const clientPhases = getClientPhasesForGroup(detailModalClient, detailModalGroup);
+      const phaseKey = clientPhases[stepNum - 1]?.key || '';
 
-    const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
-    const custom = detailModalPipe?.responsaveis_etapas?.[stepKey];
+      const defaultAssign = assignments.find(a => a.fase_fluxo === phaseKey);
+      const custom = detailModalPipe?.responsaveis_etapas?.[stepKey];
 
-    const principalId = (custom && custom.principal_id !== undefined)
-      ? (custom.principal_id || '')
-      : (defaultAssign?.responsavel_principal_id || '');
+      const principalId = (custom && custom.principal_id !== undefined)
+        ? (custom.principal_id || '')
+        : (defaultAssign?.responsavel_principal_id || '');
 
-    const backupId = (custom && custom.backup_id !== undefined)
-      ? (custom.backup_id || '')
-      : (defaultAssign?.responsavel_backup_id || '');
+      const backupId = (custom && custom.backup_id !== undefined)
+        ? (custom.backup_id || '')
+        : (defaultAssign?.responsavel_backup_id || '');
 
-    setDetailModalPath(path);
-    setDetailModalNotes(notes);
-    setDetailModalPrincipalId(principalId);
-    setDetailModalBackupId(backupId);
+      setDetailModalPath(path);
+      setDetailModalNotes(notes);
+      setDetailModalPrincipalId(principalId);
+      setDetailModalBackupId(backupId);
 
-    const initialStartAsIs = sanitizeDateYear(detailModalPipe?.start_as_is || detailModalPipe?.datas_etapas?.['5']?.data_inicio || detailModalPipe?.datas_etapas?.['5']?.data_fim || detailModalStartAsIs) || '';
-    const initialStartToBe = sanitizeDateYear(detailModalPipe?.start_to_be || detailModalPipe?.datas_etapas?.['7']?.data_inicio || detailModalPipe?.datas_etapas?.['7']?.data_fim || detailModalStartToBe) || '';
+      const initialStartAsIs = sanitizeDateYear(detailModalPipe?.start_as_is || detailModalPipe?.datas_etapas?.['5']?.data_inicio || detailModalPipe?.datas_etapas?.['5']?.data_fim || detailModalStartAsIs) || '';
+      const initialStartToBe = sanitizeDateYear(detailModalPipe?.start_to_be || detailModalPipe?.datas_etapas?.['7']?.data_inicio || detailModalPipe?.datas_etapas?.['7']?.data_fim || detailModalStartToBe) || '';
 
-    const stepDates = detailModalPipe?.datas_etapas?.[stepKey];
-    let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
-    let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
+      const stepDates = detailModalPipe?.datas_etapas?.[stepKey];
+      let startDate = sanitizeDateYear(stepDates?.data_inicio) || '';
+      let endDate = sanitizeDateYear(stepDates?.data_fim) || '';
 
-    if (detailModalGroup === 'fase_1') {
-      if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
-      if (stepNum === 7 && !startDate) startDate = initialStartToBe;
+      if (detailModalGroup === 'fase_1') {
+        if (stepNum === 5 && !startDate) startDate = initialStartAsIs;
+        if (stepNum === 7 && !startDate) startDate = initialStartToBe;
+      }
+
+      setDetailModalStartDate(startDate);
+      setDetailModalEndDate(endDate);
+      
+      const rawMultiples = detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey];
+      setDetailModalSelectedMemberIds(Array.isArray(rawMultiples) ? rawMultiples : []);
+
+      const savedStatusSwitch = detailModalPipe?.status_etapas?.[stepKey];
+      const normSavedSwitch = savedStatusSwitch ? normalizeStepStatus(savedStatusSwitch) : null;
+      const currentEtapaNum = detailModalPipe?.etapa_atual || 1;
+      const initialStatus = normSavedSwitch === 'na'
+        ? 'na'
+        : (normSavedSwitch || (currentEtapaNum === stepNum ? 'em_andamento' : 'pendente'));
+      setDetailModalStatus(initialStatus);
+    } catch (err) {
+      console.error('Erro ao trocar etapa no modal:', err);
     }
-
-    setDetailModalStartDate(startDate);
-    setDetailModalEndDate(endDate);
-    setDetailModalSelectedMemberIds(detailModalPipe?.responsaveis_multiplos_etapas?.[stepKey] || []);
-
-    const savedStatusSwitch = detailModalPipe?.status_etapas?.[stepKey];
-    const normSavedSwitch = savedStatusSwitch ? normalizeStepStatus(savedStatusSwitch) : null;
-    const phaseObjSwitch = clientPhases[stepNum - 1];
-    const isOutorgaSwitch = Boolean(phaseObjSwitch?.key?.startsWith('outorga') || phaseObjSwitch?.nome?.toLowerCase().includes('outorga') || phaseObjSwitch?.key?.toLowerCase().includes('outorga'));
-    const hasDatesSwitch = Boolean(startDate || endDate);
-    const currentEtapaNum = detailModalPipe?.etapa_atual || 1;
-    const initialStatus = normSavedSwitch === 'na'
-      ? 'na'
-      : (normSavedSwitch === 'concluido' || stepNum < currentEtapaNum || detailModalPipe?.status === 'concluido' || (isOutorgaSwitch && hasDatesSwitch)
-          ? 'concluido'
-          : (normSavedSwitch || (currentEtapaNum === stepNum ? 'em_andamento' : 'pendente'))
-        );
-    setDetailModalStatus(initialStatus);
   };
 
   const handleSaveDetail = async () => {
@@ -669,9 +669,13 @@ export default function FluxoTrabalho() {
         if (upErr) throw upErr;
       }
 
+      const clientPhases = getClientPhasesForGroup(detailModalClient, detailModalGroup);
+      const phaseName = clientPhases[detailModalStepNum - 1]?.nome || `Etapa ${stepKey}`;
+      const statusLabel = STEP_STATUS_MAP[detailModalStatus]?.label || detailModalStatus;
+
       await logActivity({
-        titulo: 'Detalhes da Etapa Atualizados',
-        descricao: `Datas do cronograma e responsáveis atualizados para ${detailModalClient.razao_social}`,
+        titulo: `Etapa ${detailModalStepNum}: ${phaseName} Atualizada`,
+        descricao: `Etapa "${phaseName}" atualizada com status [${statusLabel}] para ${detailModalClient.razao_social}`,
         tipo_log: 'info',
         client_id: detailModalClient.id,
         usuario_nome: getUserName()
@@ -721,6 +725,18 @@ export default function FluxoTrabalho() {
 
         if (upErr) throw upErr;
       }
+
+      const clientPhases = getClientPhasesForGroup(client, 'fase_1');
+      const phaseName = clientPhases[stepNum - 1]?.nome || `Etapa ${stepNum}`;
+      const statusLabel = STEP_STATUS_MAP[newStatus]?.label || newStatus;
+
+      await logActivity({
+        titulo: 'Status de Etapa Alterado',
+        descricao: `Etapa ${stepNum} (${phaseName}) alterada para [${statusLabel}] para ${client.razao_social}`,
+        tipo_log: 'info',
+        client_id: client.id,
+        usuario_nome: getUserName()
+      });
 
       fetchData(true);
     } catch (err: unknown) {

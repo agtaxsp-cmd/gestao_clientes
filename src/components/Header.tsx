@@ -21,7 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { ActivityLog, WorkflowPipeline, WorkflowPhase, WorkflowAssignment, TeamMember, Client, FaseGrupoEnum, getRegimeFromSegmento } from '../types';
+import { ActivityLog, WorkflowPipeline, WorkflowPhase, WorkflowAssignment, TeamMember, Client, FaseGrupoEnum, getRegimeFromSegmento, normalizeStepStatus } from '../types';
 import { cn } from '../lib/utils';
 import { MESES } from './workflow/types';
 
@@ -231,9 +231,12 @@ export default function Header({ collapsed = false }: HeaderProps) {
             let stepStatus: 'iniciado' | 'em_andamento' | 'concluido' = 'iniciado';
             let isCurrent = false;
 
-            if (isF1Done || stepNum < f1StepNum) {
+            const rawSt = pipeF1?.status_etapas?.[String(stepNum)];
+            const normSt = rawSt ? normalizeStepStatus(rawSt) : null;
+
+            if (normSt === 'concluido') {
               stepStatus = 'concluido';
-            } else if (stepNum === f1StepNum && !isF1Done) {
+            } else if (normSt === 'em_andamento' || (stepNum === f1StepNum && !normSt)) {
               stepStatus = 'em_andamento';
               isCurrent = true;
             }

@@ -276,16 +276,18 @@ export default function CompanyScheduleTab({
 
                 const stStatus = normSt === 'na'
                   ? 'na'
-                  : (normSt === 'concluido' || stepNum < f1StepNum || isFase1Concluido || (isOutorga && hasDates)
-                      ? 'concluido'
-                      : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'))
-                    );
+                  : (normSt || (stepNum === f1StepNum ? 'em_andamento' : 'pendente'));
 
                 const stMeta = STEP_STATUS_MAP[stStatus];
                 const days = isOutorga ? null : calculateDays(dates?.data_inicio, dates?.data_fim);
 
                 return (
-                  <tr key={phaseObj.id || phaseObj.key} className="hover:bg-slate-50/80 transition-colors">
+                  <tr 
+                    key={phaseObj.id || phaseObj.key} 
+                    onClick={() => onOpenDetail(stepNum)}
+                    className="hover:bg-indigo-50/60 transition-colors cursor-pointer"
+                    title={`Clique para gerenciar status e detalhes da etapa ${stepNum}`}
+                  >
                     <td className="px-4 py-3 text-center font-bold text-slate-500">{stepNum}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800">{phaseObj.nome}</td>
                     <td className="px-4 py-3 text-center font-mono text-slate-600">
