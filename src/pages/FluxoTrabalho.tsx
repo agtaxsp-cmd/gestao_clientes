@@ -1221,7 +1221,7 @@ export default function FluxoTrabalho() {
           client={analyticClient}
           selectedYear={selectedYear}
           pipelines={pipelines}
-          fasesDiagnostico={fasesDiagnostico}
+          fasesDiagnostico={getClientPhasesForGroup(analyticClient, 'fase_1')}
           onClose={() => setAnalyticClient(null)}
         />
       )}

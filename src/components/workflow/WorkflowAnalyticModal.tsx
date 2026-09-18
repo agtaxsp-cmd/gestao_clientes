@@ -1,5 +1,6 @@
-import { X, Compass, FileCheck, ShieldCheck, Check, Clock, Lock } from 'lucide-react';
-import { Client, WorkflowPipeline, WorkflowPhase } from '../../types';
+import { useMemo } from 'react';
+import { X, Compass, FileCheck, ShieldCheck, Check, Clock, Lock, Ban } from 'lucide-react';
+import { Client, WorkflowPipeline, WorkflowPhase, normalizeStepStatus, STEP_STATUS_MAP, getRegimeFromSegmento } from '../../types';
 import { MESES } from './types';
 import { cn } from '../../lib/utils';
 
@@ -25,6 +26,13 @@ export default function WorkflowAnalyticModal({
     return name.slice(0, 2).toUpperCase();
   };
 
+  // Garante filtragem correta pelo regime do cliente para evitar duplicatas de outros regimes
+  const clientRegime = client.regime || getRegimeFromSegmento(client.segmento);
+  const clientPhases = useMemo(() => {
+    const filtered = fasesDiagnostico.filter(p => !p.regime || p.regime === 'geral' || p.regime === clientRegime);
+    return filtered.length > 0 ? filtered : fasesDiagnostico;
+  }, [fasesDiagnostico, clientRegime]);
+
   const getFase1Pipe = () => {
     return pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
   };
@@ -39,6 +47,14 @@ export default function WorkflowAnalyticModal({
   };
 
   const f1Pipe = getFase1Pipe();
+  const statusEtapas = f1Pipe?.status_etapas || {};
+  const totalF1Steps = clientPhases.length || 7;
+  const f1DoneCount = Object.keys(statusEtapas).filter(k => {
+    const norm = normalizeStepStatus(statusEtapas[k]);
+    return norm === 'concluido' || norm === 'na';
+  }).length;
+  const isFase1Concluido = f1Pipe?.status === 'concluido' || (totalF1Steps > 0 && f1DoneCount === totalF1Steps);
+
   const f2DoneCount = MESES.filter(m => getMonthlyPipe('fase_2', m.id)?.status === 'concluido').length;
   const f3DoneCount = MESES.filter(m => getMonthlyPipe('fase_3', m.id)?.status === 'concluido').length;
 
@@ -70,29 +86,64 @@ export default function WorkflowAnalyticModal({
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {/* Bloco Fase 1 */}
           <div className="p-4 rounded-2xl border border-indigo-200 bg-indigo-50/20 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Compass className="w-5 h-5 text-indigo-600" />
                 <h4 className="text-sm font-bold text-slate-900">Fase 1 — Diagnóstico</h4>
               </div>
-              <span className="text-xs font-semibold text-indigo-700">
-                Status: {f1Pipe?.status || 'Iniciado'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-500">
+                  Progresso: <strong className="text-slate-800">{f1DoneCount}/{totalF1Steps} Concluídos</strong>
+                </span>
+                <span className={cn("text-xs font-bold uppercase", isFase1Concluido ? "text-emerald-600" : "text-indigo-700")}>
+                  Status: {isFase1Concluido ? 'Concluído' : (f1Pipe?.status || 'Iniciado')}
+                </span>
+              </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-              {fasesDiagnostico.map((p, idx) => {
-                const isDone = (f1Pipe?.status === 'concluido') || (f1Pipe?.etapa_atual ? f1Pipe.etapa_atual > idx + 1 : false);
-                const isCurrent = f1Pipe?.etapa_atual === idx + 1 && f1Pipe?.status !== 'concluido';
+              {clientPhases.map((p, idx) => {
+                const stepNum = idx + 1;
+                const rawStatus = statusEtapas[String(stepNum)];
+                const normSt = rawStatus ? normalizeStepStatus(rawStatus) : null;
+                const f1StepNum = f1Pipe?.etapa_atual || 1;
+
+                const stepStatus = normSt === 'na'
+                  ? 'na'
+                  : (normSt || (stepNum === f1StepNum && !isFase1Concluido ? 'em_andamento' : 'pendente'));
+
+                const isConcluido = stepStatus === 'concluido';
+                const isEmAndamento = stepStatus === 'em_andamento';
+                const isNa = stepStatus === 'na';
 
                 return (
-                  <div key={p.id} className={cn(
-                    "p-2.5 rounded-xl border text-center flex flex-col items-center gap-1",
-                    isDone ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
-                    isCurrent ? "bg-white border-indigo-600 ring-2 ring-indigo-50 text-indigo-900 font-bold" :
-                    "bg-white border-slate-200 text-slate-500"
+                  <div key={p.id || p.key || idx} className={cn(
+                    "p-2.5 rounded-xl border text-center flex flex-col items-center justify-between gap-1.5 min-h-[82px] transition-all",
+                    isConcluido && "bg-emerald-50/90 border-emerald-300 text-emerald-800 shadow-2xs",
+                    isEmAndamento && "bg-amber-50/90 border-amber-300 ring-2 ring-amber-200 text-amber-900 font-bold shadow-xs",
+                    isNa && "bg-slate-100/90 border-slate-200 text-slate-400 opacity-80",
+                    !isConcluido && !isEmAndamento && !isNa && "bg-white border-slate-200 text-slate-500"
                   )}>
-                    <span className="text-[10px] font-mono font-bold">0{idx + 1}</span>
-                    <span className="text-[11px] font-bold leading-tight">{p.nome}</span>
+                    <div className="w-full flex items-center justify-between px-0.5">
+                      <span className="text-[10px] font-mono font-bold">0{stepNum}</span>
+                      {isConcluido && <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />}
+                      {isEmAndamento && <Clock className="w-3.5 h-3.5 text-amber-600" />}
+                      {isNa && <Ban className="w-3.5 h-3.5 text-slate-400" />}
+                    </div>
+                    <span className={cn(
+                      "text-[11px] font-bold leading-tight my-auto",
+                      isNa && "line-through"
+                    )}>
+                      {p.nome}
+                    </span>
+                    <span className={cn(
+                      "text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded",
+                      isConcluido && "bg-emerald-100 text-emerald-700",
+                      isEmAndamento && "bg-amber-100 text-amber-800",
+                      isNa && "bg-slate-200 text-slate-500",
+                      !isConcluido && !isEmAndamento && !isNa && "text-slate-400"
+                    )}>
+                      {STEP_STATUS_MAP[stepStatus]?.label || stepStatus}
+                    </span>
                   </div>
                 );
               })}

@@ -283,12 +283,18 @@ export default function Dashboard() {
 
         const totalClientFase1Steps = clientFase1Phases.length || 7;
 
-        // Calcular etapas concluídas em verde ou etapa atual
+        // Calcular etapas concluídas ou N/A (alinhadas com o cliente)
         const statusMap = pipe1?.status_etapas || {};
-        let greenSteps = Object.values(statusMap).filter(s => s === 'verde').length;
-        if (greenSteps === 0 && pipe1) {
-          if (pipe1.status === 'concluido') greenSteps = totalClientFase1Steps;
-          else if (pipe1.etapa_atual > 1) greenSteps = Math.min(totalClientFase1Steps, pipe1.etapa_atual - 1);
+        const isClientF1Concluido = pipe1?.status === 'concluido';
+        let greenSteps = Object.values(statusMap).filter(s => {
+          const norm = typeof s === 'string' ? normalizeStepStatus(s) : null;
+          return norm === 'concluido' || norm === 'na';
+        }).length;
+
+        if (isClientF1Concluido) {
+          greenSteps = totalClientFase1Steps;
+        } else if (greenSteps === 0 && pipe1 && pipe1.etapa_atual > 1) {
+          greenSteps = Math.min(totalClientFase1Steps, pipe1.etapa_atual - 1);
         }
 
         if (!groupsMap[raiz]) {
@@ -388,13 +394,15 @@ export default function Dashboard() {
               ? customResp.backup_id
               : defAssign?.responsavel_backup_id;
 
-            const isStepConcluded = pipeF1?.status === 'concluido' || (pipeF1?.etapa_atual ? phase.ordem < pipeF1.etapa_atual : false);
+            const rawResp = pipeF1?.status_etapas?.[stepKey];
+            const normResp = rawResp ? normalizeStepStatus(rawResp) : null;
+            const isStepConcluded = pipeF1?.status === 'concluido' || normResp === 'concluido' || normResp === 'na' || (pipeF1?.etapa_atual ? phase.ordem < pipeF1.etapa_atual : false);
 
             if (principalId === member.id) {
               principaisCount++;
               if (isStepConcluded) {
                 concluidasCount++;
-              } else if (pipeF1?.etapa_atual === phase.ordem && pipeF1?.status !== 'concluido') {
+              } else if (normResp === 'em_andamento' || (pipeF1?.etapa_atual === phase.ordem && pipeF1?.status !== 'concluido')) {
                 emAndamentoCount++;
               }
             }
