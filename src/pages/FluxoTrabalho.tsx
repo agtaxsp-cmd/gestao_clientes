@@ -590,6 +590,27 @@ export default function FluxoTrabalho() {
       }
 
       if (!targetPipe) {
+        let initialEtapa = detailModalStepNum;
+        let initialStatusPipe: PipelineStatusEnum = 'em_andamento';
+        let initialMsg = `Em andamento na etapa ${detailModalStepNum}`;
+
+        if (detailModalGroup === 'fase_1') {
+          const clientPhases = getClientPhasesForGroup(detailModalClient, 'fase_1');
+          const totalFaseSteps = clientPhases.length || 7;
+          if (detailModalStatus === 'concluido') {
+            if (detailModalStepNum >= totalFaseSteps) {
+              initialEtapa = totalFaseSteps;
+              initialStatusPipe = 'concluido';
+              initialMsg = 'Diagnóstico finalizado com sucesso!';
+            } else {
+              initialEtapa = detailModalStepNum + 1;
+              initialMsg = `Em andamento na etapa ${initialEtapa}: ${clientPhases[initialEtapa - 1]?.nome || ''}`;
+            }
+          } else {
+            initialMsg = `Em andamento na etapa ${detailModalStepNum}: ${clientPhases[detailModalStepNum - 1]?.nome || ''}`;
+          }
+        }
+
         const { data: newPipe, error: insErr } = await supabase
           .from('workflow_pipelines')
           .insert({
@@ -597,8 +618,9 @@ export default function FluxoTrabalho() {
             fase_grupo: detailModalGroup,
             ano_referencia: detailModalGroup === 'fase_1' ? null : selectedYear,
             mes_referencia: detailModalGroup === 'fase_1' ? null : (detailModalMonth || 1),
-            etapa_atual: detailModalStepNum,
-            status: 'em_andamento',
+            etapa_atual: initialEtapa,
+            status: initialStatusPipe,
+            mensagem_info: initialMsg,
             caminhos_rede_etapas: { [stepKey]: detailModalPath },
             observacoes_etapas: { [stepKey]: detailModalNotes },
             responsaveis_etapas: {
@@ -650,6 +672,53 @@ export default function FluxoTrabalho() {
           [stepKey]: detailModalStatus
         };
 
+        // Para Fase 1, atualizar dinamicamente a etapa_atual e mensagem_info com base nos status das etapas
+        let newEtapaAtual = targetPipe.etapa_atual;
+        let newPipeStatus = targetPipe.status;
+        let newMsg = targetPipe.mensagem_info;
+
+        if (detailModalGroup === 'fase_1') {
+          const clientPhases = getClientPhasesForGroup(detailModalClient, 'fase_1');
+          const totalFaseSteps = clientPhases.length || 7;
+
+          let allDone = true;
+          let activeStep = 0;
+          let firstPending = 0;
+
+          for (let s = 1; s <= totalFaseSteps; s++) {
+            const st = updatedStatuses[String(s)];
+            const norm = st ? normalizeStepStatus(st) : null;
+            if (norm === 'em_andamento') {
+              activeStep = s;
+              allDone = false;
+            } else if (!norm || norm === 'pendente') {
+              allDone = false;
+              if (firstPending === 0) {
+                firstPending = s;
+              }
+            } else if (norm !== 'concluido' && norm !== 'na') {
+              allDone = false;
+            }
+          }
+
+          if (allDone && totalFaseSteps > 0) {
+            newEtapaAtual = totalFaseSteps;
+            newPipeStatus = 'concluido';
+            newMsg = 'Diagnóstico finalizado com sucesso!';
+          } else {
+            newPipeStatus = 'em_andamento';
+            if (activeStep > 0) {
+              newEtapaAtual = activeStep;
+            } else if (firstPending > 0) {
+              newEtapaAtual = firstPending;
+            } else {
+              newEtapaAtual = Math.min(totalFaseSteps, Math.max(1, targetPipe.etapa_atual || 1));
+            }
+            const currentPhaseName = clientPhases[newEtapaAtual - 1]?.nome || '';
+            newMsg = `Em andamento na etapa ${newEtapaAtual}: ${currentPhaseName}`;
+          }
+        }
+
         const { error: upErr } = await supabase
           .from('workflow_pipelines')
           .update({
@@ -661,6 +730,9 @@ export default function FluxoTrabalho() {
             start_to_be: finalStartToBe,
             responsaveis_multiplos_etapas: updatedMultiples,
             status_etapas: updatedStatuses,
+            etapa_atual: newEtapaAtual,
+            status: newPipeStatus,
+            mensagem_info: newMsg,
             caminho_rede: detailModalStepNum === 1 ? detailModalPath : (targetPipe.caminho_rede || detailModalPath),
             updated_at: new Date().toISOString()
           })

@@ -68,12 +68,16 @@ export default function CompanyWorkflowCard({
 
   // Pipeline Fase 1
   const pipeFase1 = pipelines.find(p => p.client_id === client.id && p.fase_grupo === 'fase_1');
-  const isFase1Concluido = pipeFase1?.status === 'concluido';
-  const f1StepNum = pipeFase1?.etapa_atual || 1;
+  const totalStepsF1 = fasesDiagnostico.length || 7;
 
-  // Status das etapas (contagem concluído)
+  // Status das etapas (contagem concluído + N/A alinhados com o cliente)
   const statusEtapas = pipeFase1?.status_etapas || {};
-  const greenCount = Object.values(statusEtapas).filter(s => normalizeStepStatus(s) === 'concluido').length;
+  const greenCount = Object.values(statusEtapas).filter(s => {
+    const norm = normalizeStepStatus(s);
+    return norm === 'concluido' || norm === 'na';
+  }).length;
+  const isFase1Concluido = pipeFase1?.status === 'concluido' || (totalStepsF1 > 0 && greenCount === totalStepsF1);
+  const f1StepNum = pipeFase1?.etapa_atual || 1;
 
   // Fases Desabilitadas (Não Aplicáveis)
   const fasesDesabilitadas = pipeFase1?.fases_desabilitadas || {};
